@@ -8,12 +8,19 @@
     "dynamic-island",
     "macos",
     "electron",
-    "monitoring"
+    "monitoring",
+    "agents",
+    "status"
   ],
   "license": "MIT",
+  "author": "Hamza",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/soussihamza/opencode-island.git"
+    "url": "git+https://github.com/hamzasoussi53/opencode-island.git"
+  },
+  "homepage": "https://github.com/hamzasoussi53/opencode-island#readme",
+  "bugs": {
+    "url": "https://github.com/hamzasoussi53/opencode-island/issues"
   },
   "type": "module",
   "exports": {
@@ -26,6 +33,9 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "vite build --config vite.island.config.ts && vite build",
     "dev": "vite build --config vite.island.config.ts && vite build --watch",
@@ -34,9 +44,7 @@
     "check": "node scripts/check.ts"
   },
   "dependencies": {
-    "@opencode/plugin": "^2.2.7",
-    "cn": "^0.5.2",
-    "radix-ui": "^1.8.1"
+    "@opencode/plugin": "^2.2.7"
   },
   "devDependencies": {
     "@phosphor-icons/react": "^2.1.10",
@@ -48,6 +56,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "electron": "*",
+    "radix-ui": "^1.8.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "solid-js": "^1.9.0",
