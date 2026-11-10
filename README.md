@@ -59,14 +59,15 @@ opencode plugin add github:hamzasoussi53/opencode-island
 ```sh
 git clone https://github.com/hamzasoussi53/opencode-island
 cd opencode-island
-ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm install
+npm install --ignore-scripts
 npm run build
 ln -s "$PWD" ~/.config/opencode/plugins/opencode-island
 ```
 
-`ELECTRON_SKIP_BINARY_DOWNLOAD=1` skips the ~100 MB Electron download. This
-package only needs Electron's type declarations to build; the desktop app
-supplies the runtime.
+`--ignore-scripts` skips Electron's ~100 MB binary download. The plugin only
+needs Electron's type declarations to build; the desktop app supplies the
+runtime. A plain `npm install` works too, it just downloads the binary as
+well.
 
 ## Use
 
@@ -157,7 +158,7 @@ never takes focus when it appears.
 ## Develop
 
 ```sh
-npm install         # add ELECTRON_SKIP_BINARY_DOWNLOAD=1 to skip Electron
+npm install         # --ignore-scripts also works, and skips Electron's binary
 npm run dev         # build the island, then watch the plugin bundle
 npm run typecheck   # the plugin and the island, separately
 npm run check       # the streaming tail helpers
