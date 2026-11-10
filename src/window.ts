@@ -87,14 +87,20 @@ export function createIslandWindow(options: IslandWindowOptions) {
   let size = { width: 460, height: 240 }
   // Where the tab's centre sits on the right edge; null means "middle".
   let center: number | null = null
+  // While the bar is being resized its top stays put, so the bottom follows
+  // the mouse instead of drifting away from it.
+  let anchorTop: number | null = null
 
   const place = (animate = false) => {
     if (window.isDestroyed()) return
     const area = screen.getPrimaryDisplay().workArea
     const middle = area.y + (area.height - size.height) / 2
-    const y = center == null
-      ? middle
-      : Math.min(area.y + area.height - size.height, Math.max(area.y, center - size.height / 2))
+    const y =
+      anchorTop != null
+        ? Math.min(area.y + area.height - size.height, Math.max(area.y, anchorTop))
+        : center == null
+          ? middle
+          : Math.min(area.y + area.height - size.height, Math.max(area.y, center - size.height / 2))
     window.setBounds(
       {
         x: Math.round(area.x + area.width - size.width),
@@ -170,6 +176,28 @@ export function createIslandWindow(options: IslandWindowOptions) {
     if (ours(event.sender)) window.setIgnoreMouseEvents(Boolean(ignore), { forward: true })
   }
 
+  // The bar is resized from its bottom edge: hold the top still and let the
+  // bottom follow the mouse.
+  const onResizeStart = (event: Electron.IpcMainEvent) => {
+    if (!ours(event.sender)) return
+    anchorTop = window.getBounds().y
+  }
+
+  const onResize = (event: Electron.IpcMainEvent, screenY: number) => {
+    if (!ours(event.sender) || anchorTop == null) return
+    const area = screen.getPrimaryDisplay().workArea
+    const height = Math.min(area.height, Math.max(24, Math.round(screenY - anchorTop)))
+    if (height === size.height) return
+    size = { ...size, height }
+    place(false)
+  }
+
+  const onResizeEnd = (event: Electron.IpcMainEvent) => {
+    if (!ours(event.sender)) return
+    if (anchorTop != null) center = anchorTop + size.height / 2
+    anchorTop = null
+  }
+
   // The page sizes itself against the screen, so it needs to know how big it is.
   const onScreen = () => {
     const area = screen.getPrimaryDisplay().workArea
@@ -183,6 +211,9 @@ export function createIslandWindow(options: IslandWindowOptions) {
   ipcMain.on(`${CHANNEL}:drag-start`, onDragStart)
   ipcMain.on(`${CHANNEL}:drag-end`, onDragEnd)
   ipcMain.on(`${CHANNEL}:ignore`, onIgnore)
+  ipcMain.on(`${CHANNEL}:resize-start`, onResizeStart)
+  ipcMain.on(`${CHANNEL}:resize`, onResize)
+  ipcMain.on(`${CHANNEL}:resize-end`, onResizeEnd)
   ipcMain.handle(`${CHANNEL}:screen`, onScreen)
 
   window.on("blur", () => options.onBlur())
@@ -216,6 +247,9 @@ export function createIslandWindow(options: IslandWindowOptions) {
       ipcMain.removeListener(`${CHANNEL}:drag-start`, onDragStart)
       ipcMain.removeListener(`${CHANNEL}:drag-end`, onDragEnd)
       ipcMain.removeListener(`${CHANNEL}:ignore`, onIgnore)
+      ipcMain.removeListener(`${CHANNEL}:resize-start`, onResizeStart)
+      ipcMain.removeListener(`${CHANNEL}:resize`, onResize)
+      ipcMain.removeListener(`${CHANNEL}:resize-end`, onResizeEnd)
       ipcMain.removeHandler(`${CHANNEL}:screen`)
       screen.removeListener("display-metrics-changed", onDisplaysChanged)
       screen.removeListener("display-added", onDisplaysChanged)

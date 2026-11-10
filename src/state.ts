@@ -7,6 +7,9 @@
 
 export type SessionStatus = "idle" | "busy" | "retry"
 
+/** What the session is doing right now, in a word. */
+export type SessionPhase = "idle" | "thinking" | "writing" | "working" | "waiting" | "retrying"
+
 export type PermissionDecision = "once" | "always" | "reject"
 
 export interface PermissionView {
@@ -26,6 +29,8 @@ export interface SessionView {
   /** Absolute path of the project the session belongs to. */
   directory: string
   status: SessionStatus
+  /** What the session is doing right now: thinking, working, and so on. */
+  phase?: SessionPhase
   /** Name of the tool currently running, if any. */
   tool?: string
   /** The last words the assistant said, while it is still saying them. */

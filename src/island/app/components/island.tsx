@@ -15,7 +15,6 @@ import {
 } from "@phosphor-icons/react"
 import type { IslandMessage, PermissionDecision, SessionView } from "../../../state"
 import { Button } from "@/components/ui/button"
-import { Slider } from "@/components/ui/slider"
 import { Toggle } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "@/lib/utils"
@@ -107,9 +106,11 @@ export function Island() {
   const handle = useRef<HTMLDivElement>(null)
   const pressY = useRef<number | null>(null)
   const moved = useRef(false)
+  /** True while the bottom edge of the closed bar is being dragged. */
+  const resizing = useRef(false)
+  /** True just after a resize, so the release does not open the island. */
+  const resized = useRef(false)
   const lastSize = useRef("")
-  /** The height the content wants, so the slider can show it as a share. */
-  const closedHeight = useRef(120)
 
   const { sessions, working, waiting, open } = state
 
@@ -140,10 +141,11 @@ export function Island() {
     const element = shell.current
     if (!element) return
     const report = () => {
+      // While the bar is resized the drag owns the height.
+      if (resizing.current) return
       const rect = element.getBoundingClientRect()
       const width = Math.ceil(rect.width)
       const height = Math.ceil(rect.height)
-      if (!open) closedHeight.current = height
       // The share is the length of the closed tab, so the panel stays as it is.
       const wanted = share && !open ? Math.round((screen.height * share) / 100) : height
       const next = `${width}x${wanted}`
@@ -176,6 +178,44 @@ export function Island() {
       document.removeEventListener("mouseup", onUp)
     }
   }, [])
+
+  // Dragging the bottom edge of the closed bar makes it longer or shorter.
+  // The window does the arithmetic, so the bottom edge follows the mouse.
+  useEffect(() => {
+    const onMove = (event: MouseEvent) => {
+      if (!resizing.current) return
+      window.island.resize(event.screenY)
+    }
+    const onUp = () => {
+      if (!resizing.current) return
+      resizing.current = false
+      resized.current = true
+      window.setTimeout(() => {
+        resized.current = false
+      }, 500)
+      // The window knows the length the drag asked for; keep it.
+      const next = Math.round((window.innerHeight / screen.height) * 100)
+      setShare(Math.min(90, Math.max(10, next)))
+      window.island.resizeEnd()
+    }
+    document.addEventListener("mousemove", onMove)
+    document.addEventListener("mouseup", onUp)
+    return () => {
+      document.removeEventListener("mousemove", onMove)
+      document.removeEventListener("mouseup", onUp)
+    }
+  }, [screen.height])
+
+  // While the bar is being resized the window tells us how long it is now.
+  useEffect(() => {
+    const sync = () => {
+      if (!resizing.current) return
+      const next = Math.round((window.innerHeight / screen.height) * 100)
+      setShare((current) => (current === next ? current : Math.min(90, Math.max(10, next))))
+    }
+    window.addEventListener("resize", sync)
+    return () => window.removeEventListener("resize", sync)
+  }, [screen.height])
 
   const ignore = clickThrough && !open && !hoverHandle
 
@@ -217,8 +257,21 @@ export function Island() {
       moved.current = false
       return
     }
-    if ((event.target as HTMLElement).closest("button, [data-row]")) return
+    // A resize that ended away from the handle still lands as a click.
+    if (resized.current) {
+      resized.current = false
+      return
+    }
+    if ((event.target as HTMLElement).closest("button, [data-row], [data-resize]")) return
     window.island.toggle()
+  }
+
+  // The bottom edge of the closed bar is its length handle.
+  const onResizeDown = (event: ReactMouseEvent) => {
+    if (event.button !== 0) return
+    event.stopPropagation()
+    resizing.current = true
+    window.island.resizeStart()
   }
 
   const reply = (decision: PermissionDecision) => {
@@ -327,21 +380,6 @@ export function Island() {
 
             <span className="flex-1" />
 
-            <div className="flex w-[84px] items-center gap-1.5">
-              <Slider
-                value={[share ?? Math.round((closedHeight.current * 100) / screen.height)]}
-                min={10}
-                max={90}
-                step={5}
-                onValueChange={([value]) => setShare(value)}
-                aria-label="Tab length"
-                title="Tab length"
-              />
-              <span className={cn("w-8 shrink-0 text-right text-[11px] tabular-nums", muted)}>
-                {share ?? Math.round((closedHeight.current * 100) / screen.height)}%
-              </span>
-            </div>
-
             <Toggle
               size="sm"
               variant="outline"
@@ -365,7 +403,7 @@ export function Island() {
           </div>
         </div>
       ) : (
-        <div className="flex w-full items-center gap-2 px-2 py-3 [writing-mode:vertical-rl]">
+        <div className="flex w-full items-center gap-2 px-2 pb-5 pt-3 [writing-mode:vertical-rl]">
           <div
             ref={handle}
             className={cn("flex size-5 shrink-0 items-center justify-center rounded-sm", muted)}
@@ -383,6 +421,20 @@ export function Island() {
           ) : (
             <span className="text-[12.5px] font-medium">{what}</span>
           )}
+        </div>
+      )}
+
+      {open ? null : (
+        <div
+          data-resize
+          onMouseDown={onResizeDown}
+          title="Drag to change the length"
+          className={cn(
+            "absolute inset-x-0 bottom-0 flex h-4 cursor-ns-resize items-center justify-center",
+            muted,
+          )}
+        >
+          <DotsSixVertical size={14} weight="duotone" className="rotate-90" />
         </div>
       )}
     </div>
@@ -417,6 +469,9 @@ function Row({
       <div className="min-w-0">
         <div className={cn("truncate text-[12.5px]", sub && "text-xs", sub && muted)}>
           {!sub && session.agent ? <span className={cn("mr-1.5", muted)}>{session.agent}</span> : null}
+          {!sub && session.phase && session.phase !== "idle" ? (
+            <span className={cn("mr-1.5 text-[11px] uppercase", muted)}>{session.phase}</span>
+          ) : null}
           {label(session)}
           {session.tool ? <span className={cn("ml-1.5", muted)}>{session.tool}</span> : null}
         </div>

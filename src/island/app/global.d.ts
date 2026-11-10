@@ -10,6 +10,9 @@ declare global {
       dragStart: () => void
       dragEnd: () => void
       ignore: (ignore: boolean) => void
+      resizeStart: () => void
+      resize: (screenY: number) => void
+      resizeEnd: () => void
       screen: () => Promise<{ width: number; height: number }>
       onState: (handler: (state: IslandMessage) => void) => void
     }

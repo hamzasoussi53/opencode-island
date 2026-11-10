@@ -3,6 +3,7 @@ import type {
   IslandState,
   PermissionDecision,
   PermissionView,
+  SessionPhase,
   SessionStatus,
   SessionView,
 } from "./state"
@@ -29,6 +30,9 @@ const WATCHED = [
   "session.usage.updated",
   "session.text.started",
   "session.text.delta",
+  "session.text.ended",
+  "session.reasoning.started",
+  "session.reasoning.ended",
   "permission.asked",
   "permission.replied",
 ] as const
@@ -84,6 +88,10 @@ type Watched =
       data: { sessionID: string; assistantMessageID: string; ordinal: number; delta: string }
     }
   | {
+      type: "session.text.ended" | "session.reasoning.started" | "session.reasoning.ended"
+      data: { sessionID: string; assistantMessageID: string; ordinal: number }
+    }
+  | {
       type: "session.usage.updated"
       data: { sessionID: string; cost: number; tokens: { input: number; output: number } }
     }
@@ -128,6 +136,10 @@ type Entry = SessionView & {
   tools: Map<string, string>
   /** The tail of the answer being streamed, kept to make the last words. */
   buffer: string
+  /** The agent is reasoning, before it starts writing. */
+  reasoning: boolean
+  /** The agent is writing its answer. */
+  writing: boolean
 }
 
 export interface Reply {
@@ -159,6 +171,8 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
       updated: Date.now(),
       tools: new Map(),
       buffer: "",
+      reasoning: false,
+      writing: false,
     }
     sessions.set(id, created)
     return created
@@ -171,8 +185,18 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
   }
 
   const view = (entry: Entry): SessionView => {
-    const { tools: _tools, buffer: _buffer, ...rest } = entry
-    return rest
+    const { tools: _tools, buffer: _buffer, reasoning: _r, writing: _w, ...rest } = entry
+    return { ...rest, phase: phaseOf(entry) }
+  }
+
+  /** What the session is doing right now, in the agent's own words. */
+  function phaseOf(entry: Entry): SessionPhase {
+    if (entry.permission) return "waiting"
+    if (entry.status === "retry") return "retrying"
+    if (entry.tools.size > 0) return "working"
+    if (entry.reasoning) return "thinking"
+    if (entry.writing) return "writing"
+    return "idle"
   }
 
   const state = (): IslandState => {
@@ -231,6 +255,8 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
           updated: info.time.updated,
           tools: new Map(),
           buffer: "",
+          reasoning: false,
+          writing: false,
         })
       }
       for (const request of pending.data) {
@@ -276,6 +302,11 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
           case "session.idle":
           case "session.execution.succeeded":
           case "session.execution.failed": {
+            const entry = sessions.get(event.data.sessionID)
+            if (entry) {
+              entry.reasoning = false
+              entry.writing = false
+            }
             touch(event.data.sessionID, { status: "idle", tool: undefined })
             break
           }
@@ -305,7 +336,27 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
           }
           case "session.text.started": {
             // A new answer starts, so the old words go.
-            ensure(event.data.sessionID).buffer = ""
+            const entry = ensure(event.data.sessionID)
+            entry.buffer = ""
+            entry.writing = true
+            entry.reasoning = false
+            break
+          }
+          case "session.text.ended": {
+            const entry = sessions.get(event.data.sessionID)
+            if (entry) entry.writing = false
+            break
+          }
+          case "session.reasoning.started": {
+            const entry = ensure(event.data.sessionID)
+            entry.reasoning = true
+            entry.writing = false
+            touch(event.data.sessionID, { status: "busy" })
+            break
+          }
+          case "session.reasoning.ended": {
+            const entry = sessions.get(event.data.sessionID)
+            if (entry) entry.reasoning = false
             break
           }
           case "session.text.delta": {
