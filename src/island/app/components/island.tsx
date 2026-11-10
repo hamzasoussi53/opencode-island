@@ -15,6 +15,7 @@ import {
 } from "@phosphor-icons/react"
 import type { IslandMessage, PermissionDecision, SessionView } from "../../../state"
 import { Button } from "@/components/ui/button"
+import { Slider } from "@/components/ui/slider"
 import { Toggle } from "@/components/ui/toggle"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "@/lib/utils"
@@ -98,18 +99,24 @@ export function Island() {
   const [systemDark, setSystemDark] = useState(true)
   const [now, setNow] = useState(() => Date.now())
   const [hoverHandle, setHoverHandle] = useState(false)
+  /** The height the user asked for, as a share of the screen. Null until set. */
+  const [share, setShare] = useState<number | null>(null)
+  const [screen, setScreen] = useState({ width: 1920, height: 1200 })
 
   const shell = useRef<HTMLDivElement>(null)
   const handle = useRef<HTMLDivElement>(null)
   const pressY = useRef<number | null>(null)
   const moved = useRef(false)
   const lastSize = useRef("")
+  /** The height the content wants, so the slider can show it as a share. */
+  const closedHeight = useRef(120)
 
   const { sessions, working, waiting, open } = state
 
   useEffect(() => {
     window.island.onState(setState)
     window.island.ready()
+    void window.island.screen().then(setScreen)
   }, [])
 
   useEffect(() => {
@@ -127,7 +134,8 @@ export function Island() {
     return () => window.clearInterval(timer)
   }, [open])
 
-  // The window is sized to the page; report every content change.
+  // The window is sized to the page; report every content change. A share of
+  // the screen wins over the content height, so the panel can be a set length.
   useLayoutEffect(() => {
     const element = shell.current
     if (!element) return
@@ -135,16 +143,19 @@ export function Island() {
       const rect = element.getBoundingClientRect()
       const width = Math.ceil(rect.width)
       const height = Math.ceil(rect.height)
-      const next = `${width}x${height}`
+      if (!open) closedHeight.current = height
+      // The share is the length of the closed tab, so the panel stays as it is.
+      const wanted = share && !open ? Math.round((screen.height * share) / 100) : height
+      const next = `${width}x${wanted}`
       if (next === lastSize.current) return
       lastSize.current = next
-      window.island.size(width, height)
+      window.island.size(width, wanted)
     }
     report()
     const observer = new ResizeObserver(report)
     observer.observe(element)
     return () => observer.disconnect()
-  }, [])
+  }, [share, open, screen])
 
   // Press and move on the closed tab to slide it along the edge.
   useEffect(() => {
@@ -248,18 +259,11 @@ export function Island() {
         alert
           ? "border-warning bg-warning text-warning-foreground"
           : "border-border bg-background text-foreground",
-        open ? "w-[420px]" : "max-h-[380px] w-9",
+        open ? "w-[420px]" : share ? "h-full w-9" : "max-h-[520px] w-9",
       )}
     >
-      <div
-        className={cn(
-          "absolute inset-y-0 left-0 w-[3px] transition-colors duration-300",
-          alert ? "bg-warning-foreground/25" : working > 0 ? "bg-success" : "bg-transparent",
-        )}
-      />
-
       {open ? (
-        <div className="w-full">
+        <div className="flex w-full flex-col">
           <div className={cn("flex items-center gap-2 border-b px-4 py-2 text-xs", muted)}>
             <span className={cn("font-semibold", alert ? "text-warning-foreground" : "text-foreground")}>
               {what}
@@ -322,6 +326,21 @@ export function Island() {
             </ToggleGroup>
 
             <span className="flex-1" />
+
+            <div className="flex w-[84px] items-center gap-1.5">
+              <Slider
+                value={[share ?? Math.round((closedHeight.current * 100) / screen.height)]}
+                min={10}
+                max={90}
+                step={5}
+                onValueChange={([value]) => setShare(value)}
+                aria-label="Tab length"
+                title="Tab length"
+              />
+              <span className={cn("w-8 shrink-0 text-right text-[11px] tabular-nums", muted)}>
+                {share ?? Math.round((closedHeight.current * 100) / screen.height)}%
+              </span>
+            </div>
 
             <Toggle
               size="sm"
@@ -387,19 +406,24 @@ function Row({
   return (
     <div
       data-row
-      className={cn("grid grid-cols-[8px_1fr_auto] items-center gap-2.5 px-4 py-1.5", sub && "pl-9")}
+      className={cn("grid grid-cols-[8px_1fr_auto] items-start gap-2.5 px-4 py-1.5", sub && "pl-9")}
     >
       <span
         className={cn(
-          "size-[7px] rounded-full",
+          "mt-1 size-[7px] shrink-0 rounded-full",
           waiting || session.status === "retry" ? "bg-warning" : "bg-success",
         )}
       />
-      <span className={cn("truncate text-[12.5px]", sub && "text-xs", sub && muted)}>
-        {!sub && session.agent ? <span className={cn("mr-1.5", muted)}>{session.agent}</span> : null}
-        {label(session)}
-        {session.tool ? <span className={cn("ml-1.5", muted)}>{session.tool}</span> : null}
-      </span>
+      <div className="min-w-0">
+        <div className={cn("truncate text-[12.5px]", sub && "text-xs", sub && muted)}>
+          {!sub && session.agent ? <span className={cn("mr-1.5", muted)}>{session.agent}</span> : null}
+          {label(session)}
+          {session.tool ? <span className={cn("ml-1.5", muted)}>{session.tool}</span> : null}
+        </div>
+        {session.stream ? (
+          <div className={cn("truncate text-[11.5px]", muted)}>{session.stream}</div>
+        ) : null}
+      </div>
       <span className={cn("text-[11.5px] tabular-nums", muted)}>
         {elapsed(now - (sub ? session.updated : session.created))}
       </span>

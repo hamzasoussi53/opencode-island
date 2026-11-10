@@ -22,7 +22,6 @@ import type { IslandMessage, PermissionDecision } from "./state"
 const CHANNEL = "opencode-island"
 const MIN_WIDTH = 24
 const MAX_WIDTH = 640
-const MAX_HEIGHT = 720
 
 export interface Reply extends Record<string, unknown> {
   sessionID: string
@@ -115,8 +114,10 @@ export function createIslandWindow(options: IslandWindowOptions) {
 
   const onSize = (event: Electron.IpcMainEvent, next: { width?: number; height?: number }) => {
     if (!ours(event.sender)) return
+    const area = screen.getPrimaryDisplay().workArea
     const width = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(next?.width ?? 0)))
-    const height = Math.min(MAX_HEIGHT, Math.max(24, Math.round(next?.height ?? 0)))
+    // The page may ask for a share of the screen, so the ceiling is the screen.
+    const height = Math.min(area.height, Math.max(24, Math.round(next?.height ?? 0)))
     if (width === size.width && height === size.height) return
     size = { width, height }
     // The first report happens while hidden; every later one is a drawer move.
@@ -169,6 +170,12 @@ export function createIslandWindow(options: IslandWindowOptions) {
     if (ours(event.sender)) window.setIgnoreMouseEvents(Boolean(ignore), { forward: true })
   }
 
+  // The page sizes itself against the screen, so it needs to know how big it is.
+  const onScreen = () => {
+    const area = screen.getPrimaryDisplay().workArea
+    return { width: area.width, height: area.height }
+  }
+
   ipcMain.on(`${CHANNEL}:ready`, onReady)
   ipcMain.on(`${CHANNEL}:size`, onSize)
   ipcMain.on(`${CHANNEL}:toggle`, onToggle)
@@ -176,6 +183,7 @@ export function createIslandWindow(options: IslandWindowOptions) {
   ipcMain.on(`${CHANNEL}:drag-start`, onDragStart)
   ipcMain.on(`${CHANNEL}:drag-end`, onDragEnd)
   ipcMain.on(`${CHANNEL}:ignore`, onIgnore)
+  ipcMain.handle(`${CHANNEL}:screen`, onScreen)
 
   window.on("blur", () => options.onBlur())
   window.on("closed", () => {
@@ -208,6 +216,7 @@ export function createIslandWindow(options: IslandWindowOptions) {
       ipcMain.removeListener(`${CHANNEL}:drag-start`, onDragStart)
       ipcMain.removeListener(`${CHANNEL}:drag-end`, onDragEnd)
       ipcMain.removeListener(`${CHANNEL}:ignore`, onIgnore)
+      ipcMain.removeHandler(`${CHANNEL}:screen`)
       screen.removeListener("display-metrics-changed", onDisplaysChanged)
       screen.removeListener("display-added", onDisplaysChanged)
       screen.removeListener("display-removed", onDisplaysChanged)

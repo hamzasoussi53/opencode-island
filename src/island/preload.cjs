@@ -12,5 +12,6 @@ contextBridge.exposeInMainWorld("island", {
   dragStart: () => ipcRenderer.send("opencode-island:drag-start"),
   dragEnd: () => ipcRenderer.send("opencode-island:drag-end"),
   ignore: (ignore) => ipcRenderer.send("opencode-island:ignore", ignore),
+  screen: () => ipcRenderer.invoke("opencode-island:screen"),
   onState: (handler) => ipcRenderer.on("opencode-island:state", (_event, state) => handler(state)),
 })

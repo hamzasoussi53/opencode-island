@@ -102,21 +102,25 @@ type Watched =
 /** A session untouched for this long stops being worth a row. */
 const EVICT_AFTER_MS = 6 * 60 * 60 * 1000
 
-/** The last few words of a text, which is what a streaming island shows. */
-export function tail(text: string, words: number) {
-  const parts = text.trim().split(/\s+/)
-  if (!parts[0]) return ""
-  const out = parts.slice(-words).join(" ")
-  // A single long token would otherwise make the tab taller than the screen.
-  return out.length > 24 ? out.slice(-24) : out
-}
+/** How much of an answer is kept around, enough for the island to show. */
+const STREAM_WINDOW = 200
+
+/** How many words of a streamed answer the island shows. */
+const STREAM_WORDS = 10
 
 /** Keeps the last of a text whole: a cut inside a word would show half of it. */
 export function keepWords(text: string) {
-  if (text.length <= 200) return text
-  const cut = text.slice(-200)
+  if (text.length <= STREAM_WINDOW) return text
+  const cut = text.slice(-STREAM_WINDOW)
   const space = cut.indexOf(" ")
   return space === -1 ? cut : cut.slice(space + 1)
+}
+
+/** The last words of a text, which is what a streaming island shows. */
+export function lastWords(text: string, count: number) {
+  const parts = text.trim().split(/\s+/)
+  if (!parts[0]) return ""
+  return parts.slice(-count).join(" ")
 }
 
 type Entry = SessionView & {
@@ -308,7 +312,7 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
             const data = event.data
             const entry = ensure(data.sessionID)
             entry.buffer = keepWords(entry.buffer + data.delta)
-            const text = tail(entry.buffer, 2)
+            const text = lastWords(entry.buffer, STREAM_WORDS)
             if (!text) break
             touch(data.sessionID, { stream: text })
             break

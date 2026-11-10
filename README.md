@@ -6,17 +6,18 @@ prompts you can answer without switching windows.
 
 - **Closed** it is a thin vertical tab with the status reading down the spine.
   Drag the dotted grip at the top to put it anywhere along the edge.
+- **Streaming** puts the last ten words the agent is saying in the closed tab,
+  live, as they arrive. The expanded island shows the same words under each
+  session.
 - **Expanded** (click it) lists only the sessions running right now, with
   subagents nested under the session that spawned them, each with its agent,
   running tool, elapsed time, tokens and cost. Idle sessions stay out of the way.
 - **Approvals** turn the whole island warning orange, open it, and can be
   answered in place with Allow once, Always allow or Deny.
 - **Bottom bar** switches light, dark or system appearance, turns on
-  click-through (everything but the grip stops taking clicks), and shows the
-  latest session's work in the closed tab instead of the summary, cut to ten
-  words.
-- **Streaming** puts the last two words the agent is saying in the closed tab,
-  live, as they arrive.
+  click-through (everything but the grip stops taking clicks), shows the
+  latest session's work in the closed tab instead of the summary, and sets how
+  long the closed bar runs down the edge, from 10% to 90% of the screen.
 
 Opening and closing animate as a drawer sliding out of the screen edge. The
 island never takes focus when it appears, floats above full-screen apps and
