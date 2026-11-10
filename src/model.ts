@@ -1,0 +1,316 @@
+import type { OpenCode } from "@opencode/client"
+import type {
+  IslandState,
+  PermissionDecision,
+  PermissionView,
+  SessionStatus,
+  SessionView,
+} from "./state"
+
+export type Client = ReturnType<typeof OpenCode.make>
+
+/**
+ * The events that change what the island shows. Everything else on the stream
+ * is text, reasoning and other noise a status display does not need.
+ */
+const WATCHED = [
+  "session.created",
+  "session.deleted",
+  "session.renamed",
+  "session.status",
+  "session.idle",
+  "session.execution.started",
+  "session.execution.succeeded",
+  "session.execution.failed",
+  "session.tool.input.started",
+  "session.tool.success",
+  "session.tool.failed",
+  "session.agent.selected",
+  "session.usage.updated",
+  "permission.asked",
+  "permission.replied",
+] as const
+
+/**
+ * The fields of the watched events the island reads.
+ *
+ * The client types an event's `data` as the union of every event payload, which
+ * cannot be narrowed by `type`. This local union can, and it is the contract we
+ * actually depend on.
+ */
+type Watched =
+  | {
+      type: "session.created"
+      created: number
+      data: {
+        sessionID: string
+        title?: string
+        agent?: string
+        parentID?: string
+        location?: { directory?: string }
+      }
+    }
+  | { type: "session.deleted"; data: { sessionID: string } }
+  | { type: "session.renamed"; data: { sessionID: string; title: string } }
+  | {
+      type: "session.status"
+      data: { sessionID: string; status: { type: SessionStatus } }
+    }
+  | {
+      type:
+        | "session.idle"
+        | "session.execution.started"
+        | "session.execution.succeeded"
+        | "session.execution.failed"
+      data: { sessionID: string }
+    }
+  | {
+      type: "session.tool.input.started"
+      data: { sessionID: string; id: string; name: string }
+    }
+  | {
+      type: "session.tool.success" | "session.tool.failed"
+      data: { sessionID: string; id: string }
+    }
+  | { type: "session.agent.selected"; data: { sessionID: string; agent: string } }
+  | {
+      type: "session.usage.updated"
+      data: { sessionID: string; cost: number; tokens: { input: number; output: number } }
+    }
+  | {
+      type: "permission.asked"
+      data: {
+        id: string
+        sessionID: string
+        action: string
+        resources: string[]
+        message?: string
+      }
+    }
+  | { type: "permission.replied"; data: { sessionID: string; requestID: string } }
+
+/** A session untouched for this long stops being worth a row. */
+const EVICT_AFTER_MS = 6 * 60 * 60 * 1000
+
+type Entry = SessionView & {
+  /** Tool call id -> tool name, so a completion clears the one that finished. */
+  tools: Map<string, string>
+}
+
+export interface Reply {
+  sessionID: string
+  requestID: string
+  decision: PermissionDecision
+}
+
+/**
+ * The model of every session on this machine, fed by the server's event
+ * stream. It is seeded from the session list so the island is correct on first
+ * paint, not only for work started after it appeared.
+ */
+export function createModel(client: Client, onChange: (state: IslandState) => void) {
+  const sessions = new Map<string, Entry>()
+
+  const ensure = (id: string): Entry => {
+    const found = sessions.get(id)
+    if (found) return found
+    const created: Entry = {
+      id,
+      title: "",
+      agent: "",
+      directory: "",
+      status: "busy",
+      cost: 0,
+      tokens: 0,
+      created: Date.now(),
+      updated: Date.now(),
+      tools: new Map(),
+    }
+    sessions.set(id, created)
+    return created
+  }
+
+  const touch = (id: string, patch: Partial<SessionView> = {}) => {
+    const entry = sessions.get(id)
+    if (!entry) return
+    Object.assign(entry, patch, { updated: Date.now() })
+  }
+
+  const view = (entry: Entry): SessionView => {
+    const { tools: _tools, ...rest } = entry
+    return rest
+  }
+
+  const state = (): IslandState => {
+    const now = Date.now()
+    const visible: SessionView[] = []
+    for (const entry of sessions.values()) {
+      if (now - entry.updated > EVICT_AFTER_MS) continue
+      visible.push(view(entry))
+    }
+    // Waiting first, then working, then idle; newest first within a rank.
+    const rank = (s: SessionView) =>
+      s.permission ? 0 : s.status === "busy" ? 1 : s.status === "retry" ? 2 : 3
+    visible.sort((a, b) => rank(a) - rank(b) || b.updated - a.updated)
+    return {
+      sessions: visible,
+      working: visible.filter((s) => s.status === "busy" || s.status === "retry").length,
+      waiting: visible.filter((s) => s.permission).length,
+    }
+  }
+
+  const publish = () => onChange(state())
+
+  const toPermission = (data: {
+    id: string
+    sessionID: string
+    action: string
+    resources?: string[]
+    message?: string
+  }): PermissionView => ({
+    id: data.id,
+    sessionID: data.sessionID,
+    action: data.action,
+    resources: data.resources ?? [],
+    message: data.message,
+  })
+
+  const seed = async (signal: AbortSignal) => {
+    try {
+      const [listed, pending] = await Promise.all([
+        client.session.list({ limit: 200 }, { signal }),
+        client.permission.request.list(undefined, { signal }),
+      ])
+      for (const info of listed.data) {
+        // A live event may have beaten the list here; keep the fresher record.
+        if (sessions.has(info.id)) continue
+        sessions.set(info.id, {
+          id: info.id,
+          title: info.title ?? "",
+          agent: info.agent ?? "",
+          parentID: info.parentID,
+          directory: info.location?.directory ?? "",
+          status: "idle",
+          cost: info.cost,
+          tokens: info.tokens.input + info.tokens.output,
+          created: info.time.created,
+          updated: info.time.updated,
+          tools: new Map(),
+        })
+      }
+      for (const request of pending.data) {
+        ensure(request.sessionID).permission = toPermission(request)
+      }
+      publish()
+    } catch {
+      // The stream still keeps the island correct; a failed seed only loses history.
+    }
+  }
+
+  const listen = async (signal: AbortSignal) => {
+    try {
+      const stream = client.event.subscribe({
+        types: [...WATCHED],
+        signal,
+      }) as AsyncIterable<Watched>
+      for await (const event of stream) {
+        switch (event.type) {
+          case "session.created": {
+            const data = event.data
+            const entry = ensure(data.sessionID)
+            entry.title = data.title ?? entry.title
+            entry.agent = data.agent ?? entry.agent
+            entry.parentID = data.parentID ?? entry.parentID
+            entry.directory = data.location?.directory ?? entry.directory
+            entry.created = event.created
+            entry.updated = Date.now()
+            break
+          }
+          case "session.deleted": {
+            sessions.delete(event.data.sessionID)
+            break
+          }
+          case "session.renamed": {
+            touch(event.data.sessionID, { title: event.data.title })
+            break
+          }
+          case "session.status": {
+            touch(event.data.sessionID, { status: event.data.status.type })
+            break
+          }
+          case "session.idle":
+          case "session.execution.succeeded":
+          case "session.execution.failed": {
+            touch(event.data.sessionID, { status: "idle", tool: undefined })
+            break
+          }
+          case "session.execution.started": {
+            touch(event.data.sessionID, { status: "busy" })
+            break
+          }
+          case "session.tool.input.started": {
+            const data = event.data
+            ensure(data.sessionID).tools.set(data.id, data.name)
+            touch(data.sessionID, { status: "busy", tool: data.name })
+            break
+          }
+          case "session.tool.success":
+          case "session.tool.failed": {
+            const data = event.data
+            const entry = sessions.get(data.sessionID)
+            if (!entry) break
+            entry.tools.delete(data.id)
+            const next = entry.tools.values().next()
+            entry.tool = next.done ? undefined : next.value
+            break
+          }
+          case "session.agent.selected": {
+            touch(event.data.sessionID, { agent: event.data.agent })
+            break
+          }
+          case "session.usage.updated": {
+            const data = event.data
+            touch(data.sessionID, {
+              cost: data.cost,
+              tokens: data.tokens.input + data.tokens.output,
+            })
+            break
+          }
+          case "permission.asked": {
+            const data = event.data
+            ensure(data.sessionID).permission = toPermission(data)
+            touch(data.sessionID)
+            break
+          }
+          case "permission.replied": {
+            const data = event.data
+            const entry = sessions.get(data.sessionID)
+            if (entry && entry.permission?.id === data.requestID) {
+              entry.permission = undefined
+              entry.updated = Date.now()
+            }
+            break
+          }
+        }
+        publish()
+      }
+    } catch {
+      // Aborted on shutdown, or the server restarted. The plugin reconnects.
+    }
+  }
+
+  return {
+    start(signal: AbortSignal) {
+      void seed(signal)
+      void listen(signal)
+    },
+    reply(reply: Reply) {
+      return client.permission.reply({
+        sessionID: reply.sessionID,
+        requestID: reply.requestID,
+        decision: reply.decision,
+      })
+    },
+    state,
+  }
+}

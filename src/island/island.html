@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';" />
+<title>OpenCode Island</title>
+<style>
+  :root {
+    --label: #f5f5f7;
+    --label-2: #8e8e93;
+    --label-3: #3a3a3c;
+    --green: #30d158;
+    --orange: #ff9f0a;
+    --red: #ff453a;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    color: var(--label);
+    user-select: none;
+    cursor: default;
+  }
+
+  #island {
+    position: relative;
+    width: max-content;
+    max-width: 460px;
+    background: #000;
+    border: 1px solid rgba(255, 255, 255, .12);
+    border-radius: 18px;
+    overflow: hidden;
+  }
+  #island[data-open="true"] { width: 420px; }
+
+  /* The state rail: green working, orange waiting, red failed. */
+  #rail {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: transparent;
+    transition: background .25s ease;
+  }
+  #island[data-state="busy"] #rail { background: var(--green); }
+  #island[data-state="waiting"] #rail { background: var(--orange); }
+  #island[data-state="error"] #rail { background: var(--red); }
+
+  /* ---- contracted ---- */
+
+  #compact {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    height: 34px;
+    padding: 0 15px 0 16px;
+    font-size: 12.5px;
+    white-space: nowrap;
+  }
+  #compact .dot {
+    flex: none;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--label-3);
+    transition: background .25s ease;
+  }
+  #island[data-state="busy"] #compact .dot { background: var(--green); }
+  #island[data-state="waiting"] #compact .dot { background: var(--orange); }
+  #island[data-state="error"] #compact .dot { background: var(--red); }
+
+  #compact .what { font-weight: 500; }
+  #compact .meta {
+    color: var(--label-2);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  /* ---- expanded ---- */
+
+  #expanded { display: none; }
+  #island[data-open="true"] #compact { display: none; }
+  #island[data-open="true"] #expanded { display: block; }
+
+  #head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px 9px 17px;
+    font-size: 12px;
+    color: var(--label-2);
+    border-bottom: 1px solid rgba(255, 255, 255, .08);
+  }
+  #head .count { color: var(--label); font-weight: 600; }
+  #head .spacer { flex: 1; }
+  #head .num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  #rows { padding: 4px 0 6px; max-height: 280px; overflow-y: auto; }
+
+  .row {
+    display: grid;
+    grid-template-columns: 8px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 16px 6px 17px;
+    font-size: 12.5px;
+  }
+  .row.sub {
+    grid-template-columns: 8px 1fr auto;
+    padding-left: 36px;
+    font-size: 12px;
+    color: var(--label-2);
+  }
+  .row .status {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+  }
+  .row .status.idle { background: var(--label-3); }
+  .row .status.retry { background: var(--orange); }
+  .row .status.waiting { background: var(--orange); }
+
+  .row .title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .row .agent { color: var(--label-2); margin-right: 6px; }
+  .row .tool { color: var(--label-2); margin-left: 6px; }
+  .row .right {
+    color: var(--label-2);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+    font-size: 11.5px;
+    white-space: nowrap;
+  }
+
+  /* ---- permission ---- */
+
+  #ask {
+    display: none;
+    padding: 12px 16px 14px 17px;
+    border-top: 1px solid rgba(255, 255, 255, .08);
+  }
+  #island[data-waiting="true"] #ask { display: block; }
+  #ask .q { font-size: 12.5px; margin-bottom: 3px; }
+  #ask .r {
+    font-size: 11.5px;
+    color: var(--label-2);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 11px;
+  }
+  #ask .acts { display: flex; gap: 8px; }
+  #ask button {
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 5px 13px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, .18);
+    background: transparent;
+    color: var(--label);
+    cursor: pointer;
+  }
+  #ask button:hover { background: rgba(255, 255, 255, .1); }
+  #ask button.go {
+    background: var(--green);
+    border-color: var(--green);
+    color: #06210f;
+  }
+  #ask button.go:hover { filter: brightness(1.1); }
+  #ask button:focus-visible { outline: 2px solid var(--label); outline-offset: 2px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #rail, #compact .dot { transition: none; }
+  }
+</style>
+</head>
+<body>
+  <div id="island" data-open="false" data-state="idle" data-waiting="false">
+    <div id="rail"></div>
+
+    <div id="compact">
+      <span class="dot"></span>
+      <span class="what">No sessions</span>
+      <span class="meta"></span>
+    </div>
+
+    <div id="expanded">
+      <div id="head">
+        <span class="count"></span>
+        <span class="spacer"></span>
+        <span class="num tokens"></span>
+        <span class="num cost"></span>
+      </div>
+      <div id="rows"></div>
+      <div id="ask">
+        <div class="q"></div>
+        <div class="r"></div>
+        <div class="acts">
+          <button class="go" data-decision="once">Allow once</button>
+          <button data-decision="always">Always allow</button>
+          <button data-decision="reject">Deny</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function () {
+  var state = { sessions: [], working: 0, waiting: 0, open: false };
+  var island = document.getElementById("island");
+  var compact = document.getElementById("compact");
+  var rows = document.getElementById("rows");
+  var ask = document.getElementById("ask");
+  var headCount = document.querySelector("#head .count");
+  var headTokens = document.querySelector("#head .tokens");
+  var headCost = document.querySelector("#head .cost");
+  var lastSize = "";
+
+  function elapsed(ms) {
+    if (!ms || ms < 0) return "";
+    var s = Math.floor(ms / 1000);
+    if (s < 60) return s + "s";
+    var m = Math.floor(s / 60);
+    if (m < 60) return m + "m " + String(s % 60).padStart(2, "0") + "s";
+    return Math.floor(m / 60) + "h " + String(m % 60).padStart(2, "0") + "m";
+  }
+
+  function tokens(n) {
+    if (!n) return "0";
+    if (n < 1000) return String(n);
+    if (n < 1000000) return (n / 1000).toFixed(n < 10000 ? 1 : 0) + "K";
+    return (n / 1000000).toFixed(2) + "M";
+  }
+
+  function money(n) {
+    if (!n) return "";
+    return "$" + (n < 0.01 ? n.toFixed(4) : n.toFixed(2));
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function label(session) {
+    return session.permission ? session.permission.action + " needs approval" : session.title || "Untitled session";
+  }
+
+  function row(session, sub, now) {
+    var status = session.permission ? " waiting" : session.status === "busy" ? "" : session.status === "retry" ? " retry" : " idle";
+    var agent = session.agent && !sub ? '<span class="agent">' + escapeHtml(session.agent) + "</span>" : "";
+    var tool = session.tool ? '<span class="tool">' + escapeHtml(session.tool) + "</span>" : "";
+    var right = sub ? (session.status === "idle" ? "done" : elapsed(now - session.updated)) : elapsed(now - session.created);
+    return (
+      '<div class="row' + (sub ? " sub" : "") + '">' +
+        '<span class="status' + status + '"></span>' +
+        '<span class="title">' + agent + escapeHtml(label(session)) + tool + "</span>" +
+        '<span class="right">' + right + "</span>" +
+      "</div>"
+    );
+  }
+
+  function render() {
+    var sessions = state.sessions || [];
+    var now = Date.now();
+    var working = state.working || 0;
+    var waiting = state.waiting || 0;
+    var totalTokens = 0;
+    var totalCost = 0;
+    var newest = 0;
+    var i;
+
+    for (i = 0; i < sessions.length; i++) {
+      totalTokens += sessions[i].tokens || 0;
+      totalCost += sessions[i].cost || 0;
+      if (sessions[i].status === "busy" || sessions[i].status === "retry") {
+        newest = Math.max(newest, sessions[i].updated || 0);
+      }
+    }
+
+    island.setAttribute("data-open", state.open ? "true" : "false");
+    island.setAttribute("data-waiting", waiting > 0 ? "true" : "false");
+    island.setAttribute("data-state", waiting > 0 ? "waiting" : working > 0 ? "busy" : "idle");
+
+    var what = waiting > 0
+      ? (waiting === 1 ? "1 approval needed" : waiting + " approvals needed")
+      : working > 0
+        ? (working === 1 ? "1 agent working" : working + " agents working")
+        : sessions.length ? "Idle" : "No sessions";
+
+    compact.querySelector(".what").textContent = what;
+    compact.querySelector(".meta").textContent = working > 0 && waiting === 0 && newest ? elapsed(now - newest) : "";
+
+    headCount.textContent = what;
+    headTokens.textContent = totalTokens ? tokens(totalTokens) + " tokens" : "";
+    headCost.textContent = money(totalCost);
+
+    // Top-level sessions, each followed by its subagents.
+    var byParent = {};
+    var roots = [];
+    var known = {};
+    for (i = 0; i < sessions.length; i++) known[sessions[i].id] = true;
+    for (i = 0; i < sessions.length; i++) {
+      var session = sessions[i];
+      if (session.parentID && known[session.parentID]) {
+        (byParent[session.parentID] = byParent[session.parentID] || []).push(session);
+      } else {
+        roots.push(session);
+      }
+    }
+
+    var html = "";
+    for (i = 0; i < roots.length; i++) {
+      html += row(roots[i], false, now);
+      var kids = byParent[roots[i].id] || [];
+      for (var k = 0; k < kids.length; k++) html += row(kids[k], true, now);
+    }
+    rows.innerHTML = html;
+
+    // The first pending request is the one the buttons answer.
+    var pending = null;
+    for (i = 0; i < sessions.length; i++) {
+      if (sessions[i].permission) { pending = sessions[i].permission; break; }
+    }
+    if (pending) {
+      ask.querySelector(".q").textContent = pending.action;
+      ask.querySelector(".r").textContent = (pending.resources || []).join("   ") || pending.message || "";
+      ask.setAttribute("data-session", pending.sessionID);
+      ask.setAttribute("data-request", pending.id);
+    }
+
+    reportSize();
+  }
+
+  function reportSize() {
+    var rect = island.getBoundingClientRect();
+    var width = Math.ceil(rect.width);
+    var height = Math.ceil(rect.height);
+    var next = width + "x" + height;
+    if (next === lastSize) return;
+    lastSize = next;
+    window.island.size(width, height);
+  }
+
+  window.island.onState(function (next) {
+    state = next || { sessions: [], working: 0, waiting: 0, open: false };
+    render();
+  });
+
+  document.addEventListener("click", function (event) {
+    var button = event.target.closest("button[data-decision]");
+    if (button) {
+      event.preventDefault();
+      var sessionID = ask.getAttribute("data-session");
+      var requestID = ask.getAttribute("data-request");
+      if (sessionID && requestID) {
+        window.island.reply({
+          sessionID: sessionID,
+          requestID: requestID,
+          decision: button.getAttribute("data-decision")
+        });
+      }
+      return;
+    }
+    if (event.target.closest("#rows .row")) return;
+    window.island.toggle();
+  });
+
+  // Elapsed counters tick while the list is open and nothing else changes.
+  setInterval(function () {
+    if (island.getAttribute("data-open") === "true") render();
+  }, 1000);
+
+  window.island.ready();
+  render();
+})();
+</script>
+</body>
+</html>
