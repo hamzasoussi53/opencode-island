@@ -30,7 +30,8 @@
     "build": "vite build --config vite.island.config.ts && vite build",
     "dev": "vite build --config vite.island.config.ts && vite build --watch",
     "prepare": "npm run build",
-    "typecheck": "tsc --noEmit && tsc -p src/island/app --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p src/island/app --noEmit",
+    "check": "node scripts/check.ts"
   },
   "dependencies": {
     "@opencode/plugin": "^2.2.7",

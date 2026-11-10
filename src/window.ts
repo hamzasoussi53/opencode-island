@@ -59,6 +59,9 @@ export function createIslandWindow(options: IslandWindowOptions) {
     transparent: true,
     backgroundColor: "#00000000",
     hasShadow: false,
+    // The island shapes its own outer corners; the window mask would round the
+    // screen edge too and leave a visible sliver of desktop there.
+    roundedCorners: false,
     resizable: false,
     movable: false,
     minimizable: false,

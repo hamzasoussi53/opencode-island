@@ -15,6 +15,8 @@ prompts you can answer without switching windows.
   click-through (everything but the grip stops taking clicks), and shows the
   latest session's work in the closed tab instead of the summary, cut to ten
   words.
+- **Streaming** puts the last two words the agent is saying in the closed tab,
+  live, as they arrive.
 
 Opening and closing animate as a drawer sliding out of the screen edge. The
 island never takes focus when it appears, floats above full-screen apps and
@@ -44,6 +46,7 @@ runtime.
 ```sh
 npm run dev       # build the island once, then watch the plugin bundle
 npm run typecheck
+npm run check     # the streaming tail helpers
 ```
 
 Restart the app after changing anything that runs in its main process

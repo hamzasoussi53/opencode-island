@@ -28,6 +28,8 @@ export interface SessionView {
   status: SessionStatus
   /** Name of the tool currently running, if any. */
   tool?: string
+  /** The last words the assistant said, while it is still saying them. */
+  stream?: string
   /** Set while the session waits on the user to approve something. */
   permission?: PermissionView
   cost: number

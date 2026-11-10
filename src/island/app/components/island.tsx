@@ -94,7 +94,7 @@ export function Island() {
   const [state, setState] = useState<IslandMessage>(EMPTY)
   const [theme, setTheme] = useState<Theme>("dark")
   const [clickThrough, setClickThrough] = useState(false)
-  const [showLatest, setShowLatest] = useState(false)
+  const [showLatest, setShowLatest] = useState(true)
   const [systemDark, setSystemDark] = useState(true)
   const [now, setNow] = useState(() => Date.now())
   const [hoverHandle, setHoverHandle] = useState(false)
@@ -244,7 +244,7 @@ export function Island() {
       onMouseDown={onMouseDown}
       onClick={onClick}
       className={cn(
-        "relative flex shrink-0 flex-col overflow-hidden rounded-l-[18px] border transition-colors duration-300",
+        "relative flex shrink-0 flex-col overflow-hidden rounded-l-lg rounded-r-none border transition-colors duration-300",
         alert
           ? "border-warning bg-warning text-warning-foreground"
           : "border-border bg-background text-foreground",
@@ -346,7 +346,7 @@ export function Island() {
           </div>
         </div>
       ) : (
-        <div className="flex w-full items-center gap-2 py-2.5 [writing-mode:vertical-rl]">
+        <div className="flex w-full items-center gap-2 px-2 py-3 [writing-mode:vertical-rl]">
           <div
             ref={handle}
             className={cn("flex size-5 shrink-0 items-center justify-center rounded-sm", muted)}
@@ -356,7 +356,9 @@ export function Island() {
           <span className={cn("size-[7px] shrink-0 rounded-full transition-colors duration-300", dot)} />
           {work ? (
             <>
-              <span className="text-[12.5px] font-medium">{trim(work.title || "Untitled session", 10)}</span>
+              <span className="text-[12.5px] font-medium">
+                {work.stream || trim(work.title || "Untitled session", 10)}
+              </span>
               {work.tool ? <span className={cn("text-xs", muted)}>{work.tool}</span> : null}
             </>
           ) : (

@@ -27,6 +27,8 @@ const WATCHED = [
   "session.tool.failed",
   "session.agent.selected",
   "session.usage.updated",
+  "session.text.started",
+  "session.text.delta",
   "permission.asked",
   "permission.replied",
 ] as const
@@ -74,6 +76,14 @@ type Watched =
     }
   | { type: "session.agent.selected"; data: { sessionID: string; agent: string } }
   | {
+      type: "session.text.started"
+      data: { sessionID: string; assistantMessageID: string; ordinal: number }
+    }
+  | {
+      type: "session.text.delta"
+      data: { sessionID: string; assistantMessageID: string; ordinal: number; delta: string }
+    }
+  | {
       type: "session.usage.updated"
       data: { sessionID: string; cost: number; tokens: { input: number; output: number } }
     }
@@ -92,9 +102,28 @@ type Watched =
 /** A session untouched for this long stops being worth a row. */
 const EVICT_AFTER_MS = 6 * 60 * 60 * 1000
 
+/** The last few words of a text, which is what a streaming island shows. */
+export function tail(text: string, words: number) {
+  const parts = text.trim().split(/\s+/)
+  if (!parts[0]) return ""
+  const out = parts.slice(-words).join(" ")
+  // A single long token would otherwise make the tab taller than the screen.
+  return out.length > 24 ? out.slice(-24) : out
+}
+
+/** Keeps the last of a text whole: a cut inside a word would show half of it. */
+export function keepWords(text: string) {
+  if (text.length <= 200) return text
+  const cut = text.slice(-200)
+  const space = cut.indexOf(" ")
+  return space === -1 ? cut : cut.slice(space + 1)
+}
+
 type Entry = SessionView & {
   /** Tool call id -> tool name, so a completion clears the one that finished. */
   tools: Map<string, string>
+  /** The tail of the answer being streamed, kept to make the last words. */
+  buffer: string
 }
 
 export interface Reply {
@@ -125,6 +154,7 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
       created: Date.now(),
       updated: Date.now(),
       tools: new Map(),
+      buffer: "",
     }
     sessions.set(id, created)
     return created
@@ -137,7 +167,7 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
   }
 
   const view = (entry: Entry): SessionView => {
-    const { tools: _tools, ...rest } = entry
+    const { tools: _tools, buffer: _buffer, ...rest } = entry
     return rest
   }
 
@@ -196,6 +226,7 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
           created: info.time.created,
           updated: info.time.updated,
           tools: new Map(),
+          buffer: "",
         })
       }
       for (const request of pending.data) {
@@ -266,6 +297,20 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
           }
           case "session.agent.selected": {
             touch(event.data.sessionID, { agent: event.data.agent })
+            break
+          }
+          case "session.text.started": {
+            // A new answer starts, so the old words go.
+            ensure(event.data.sessionID).buffer = ""
+            break
+          }
+          case "session.text.delta": {
+            const data = event.data
+            const entry = ensure(data.sessionID)
+            entry.buffer = keepWords(entry.buffer + data.delta)
+            const text = tail(entry.buffer, 2)
+            if (!text) break
+            touch(data.sessionID, { stream: text })
             break
           }
           case "session.usage.updated": {
