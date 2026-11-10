@@ -45,11 +45,14 @@ export default Plugin.define({
     })
 
     // The sidecar appears after startup and moves when it restarts, so the
-    // endpoint is followed rather than read once.
+    // endpoint is followed rather than read once. A restart keeps the URL but
+    // rotates the password, so the headers are part of the identity.
     const connect = () => {
       const endpoint = ctx.serverEndpoints.get("sidecar")
-      if (!endpoint || endpoint.url === connected) return
-      connected = endpoint.url
+      if (!endpoint) return
+      const key = endpoint.url + JSON.stringify(endpoint.headers)
+      if (key === connected) return
+      connected = key
       controller?.abort()
       controller = new AbortController()
       model = createModel(
