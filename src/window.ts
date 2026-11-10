@@ -2,7 +2,7 @@ import { BrowserWindow, ipcMain, screen } from "electron"
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import islandHtml from "./island/island.html?raw"
+import islandHtml from "../dist/island/index.html?raw"
 import islandPreload from "./island/preload.cjs?raw"
 import type { IslandMessage, PermissionDecision } from "./state"
 
@@ -20,7 +20,7 @@ import type { IslandMessage, PermissionDecision } from "./state"
  */
 
 const CHANNEL = "opencode-island"
-const MIN_WIDTH = 60
+const MIN_WIDTH = 24
 const MAX_WIDTH = 640
 const MAX_HEIGHT = 720
 
@@ -83,18 +83,25 @@ export function createIslandWindow(options: IslandWindowOptions) {
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
   let size = { width: 460, height: 240 }
+  // Where the tab's centre sits on the right edge; null means "middle".
+  let center: number | null = null
 
-  const place = () => {
+  const place = (animate = false) => {
     if (window.isDestroyed()) return
     const area = screen.getPrimaryDisplay().workArea
-    // Docked to the right edge, vertically centred: growing the window extends
-    // it leftwards, the way a drawer opens.
-    window.setBounds({
-      x: Math.round(area.x + area.width - size.width),
-      y: Math.round(area.y + (area.height - size.height) / 2),
-      width: size.width,
-      height: size.height,
-    })
+    const middle = area.y + (area.height - size.height) / 2
+    const y = center == null
+      ? middle
+      : Math.min(area.y + area.height - size.height, Math.max(area.y, center - size.height / 2))
+    window.setBounds(
+      {
+        x: Math.round(area.x + area.width - size.width),
+        y: Math.round(y),
+        width: size.width,
+        height: size.height,
+      },
+      animate,
+    )
   }
 
   const ours = (sender: Electron.WebContents) => !window.isDestroyed() && sender === window.webContents
@@ -109,8 +116,10 @@ export function createIslandWindow(options: IslandWindowOptions) {
     const height = Math.min(MAX_HEIGHT, Math.max(24, Math.round(next?.height ?? 0)))
     if (width === size.width && height === size.height) return
     size = { width, height }
-    place()
-    if (!window.isVisible()) {
+    // The first report happens while hidden; every later one is a drawer move.
+    const first = !window.isVisible()
+    place(!first)
+    if (first) {
       window.showInactive()
       options.log("info", "island shown", { width, height })
     }
@@ -124,13 +133,52 @@ export function createIslandWindow(options: IslandWindowOptions) {
     if (ours(event.sender)) options.onReply(reply)
   }
 
+  // Dragging the closed tab slides it along the edge: the window follows the
+  // cursor's vertical position and stays flush right.
+  let drag: ReturnType<typeof setInterval> | null = null
+
+  const stopDrag = () => {
+    if (drag) clearInterval(drag)
+    drag = null
+  }
+
+  const onDragStart = (event: Electron.IpcMainEvent) => {
+    if (!ours(event.sender) || drag) return
+    const start = screen.getCursorScreenPoint().y
+    const offset = start - (window.getBounds().y + size.height / 2)
+    let last = start
+    drag = setInterval(() => {
+      if (window.isDestroyed()) return stopDrag()
+      const y = screen.getCursorScreenPoint().y
+      if (y === last) return
+      last = y
+      center = y - offset
+      place()
+    }, 16)
+  }
+
+  const onDragEnd = (event: Electron.IpcMainEvent) => {
+    if (ours(event.sender)) stopDrag()
+  }
+
+  // Click-through: the page decides, since only it knows where the grip is.
+  const onIgnore = (event: Electron.IpcMainEvent, ignore: boolean) => {
+    if (ours(event.sender)) window.setIgnoreMouseEvents(Boolean(ignore), { forward: true })
+  }
+
   ipcMain.on(`${CHANNEL}:ready`, onReady)
   ipcMain.on(`${CHANNEL}:size`, onSize)
   ipcMain.on(`${CHANNEL}:toggle`, onToggle)
   ipcMain.on(`${CHANNEL}:reply`, onReply)
+  ipcMain.on(`${CHANNEL}:drag-start`, onDragStart)
+  ipcMain.on(`${CHANNEL}:drag-end`, onDragEnd)
+  ipcMain.on(`${CHANNEL}:ignore`, onIgnore)
 
   window.on("blur", () => options.onBlur())
-  window.on("closed", () => options.log("debug", "island window closed"))
+  window.on("closed", () => {
+    stopDrag()
+    options.log("debug", "island window closed")
+  })
   window.webContents.on("did-fail-load", (_event, code, description) =>
     options.log("error", "island page failed to load", { code, description }),
   )
@@ -154,9 +202,13 @@ export function createIslandWindow(options: IslandWindowOptions) {
       ipcMain.removeListener(`${CHANNEL}:size`, onSize)
       ipcMain.removeListener(`${CHANNEL}:toggle`, onToggle)
       ipcMain.removeListener(`${CHANNEL}:reply`, onReply)
+      ipcMain.removeListener(`${CHANNEL}:drag-start`, onDragStart)
+      ipcMain.removeListener(`${CHANNEL}:drag-end`, onDragEnd)
+      ipcMain.removeListener(`${CHANNEL}:ignore`, onIgnore)
       screen.removeListener("display-metrics-changed", onDisplaysChanged)
       screen.removeListener("display-added", onDisplaysChanged)
       screen.removeListener("display-removed", onDisplaysChanged)
+      stopDrag()
       if (!window.isDestroyed()) window.destroy()
       rmSync(dir, { recursive: true, force: true })
     },

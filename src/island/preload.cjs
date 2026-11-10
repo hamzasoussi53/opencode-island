@@ -9,5 +9,8 @@ contextBridge.exposeInMainWorld("island", {
   size: (width, height) => ipcRenderer.send("opencode-island:size", { width, height }),
   toggle: () => ipcRenderer.send("opencode-island:toggle"),
   reply: (reply) => ipcRenderer.send("opencode-island:reply", reply),
+  dragStart: () => ipcRenderer.send("opencode-island:drag-start"),
+  dragEnd: () => ipcRenderer.send("opencode-island:drag-end"),
+  ignore: (ignore) => ipcRenderer.send("opencode-island:ignore", ignore),
   onState: (handler) => ipcRenderer.on("opencode-island:state", (_event, state) => handler(state)),
 })
