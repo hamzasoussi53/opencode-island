@@ -1,8 +1,8 @@
 # opencode-island
 
-A macOS Dynamic Island for OpenCode. It sits at the top of your screen and shows
-what every session and agent is doing, plus permission prompts you can answer
-without switching windows.
+A macOS Dynamic Island for OpenCode. It docks to the right edge of your screen
+and shows what every session and agent is doing, plus permission prompts you can
+answer without switching windows.
 
 - **Contracted** shows one line: `2 agents working · 14s`, `1 approval needed`, `Idle`.
 - **Expanded** (click it) lists only the sessions running right now, with
@@ -68,7 +68,7 @@ pushes it to the island over IPC. Approval buttons call
 
 - macOS only. The window uses `setVisibleOnAllWorkspaces` and a screen-saver
   window level.
-- Primary display only, and it sits below the menu bar rather than in the notch.
+- Primary display only; it docks to the right edge, vertically centred.
 - Creating a `BrowserWindow` directly is off-contract: the GUI API is
   experimental and has no way to make a window of its own. Everything that
   touches raw Electron is in `src/window.ts`, so a future API change is one

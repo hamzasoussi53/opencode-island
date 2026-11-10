@@ -87,9 +87,11 @@ export function createIslandWindow(options: IslandWindowOptions) {
   const place = () => {
     if (window.isDestroyed()) return
     const area = screen.getPrimaryDisplay().workArea
+    // Docked to the right edge, vertically centred: growing the window extends
+    // it leftwards, the way a drawer opens.
     window.setBounds({
-      x: Math.round(area.x + (area.width - size.width) / 2),
-      y: Math.round(area.y),
+      x: Math.round(area.x + area.width - size.width),
+      y: Math.round(area.y + (area.height - size.height) / 2),
       width: size.width,
       height: size.height,
     })
