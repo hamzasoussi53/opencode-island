@@ -5,9 +5,9 @@ what every session and agent is doing, plus permission prompts you can answer
 without switching windows.
 
 - **Contracted** shows one line: `2 agents working · 14s`, `1 approval needed`, `Idle`.
-- **Expanded** (click it) lists every session, with subagents nested under the
-  session that spawned them, each with its agent, running tool, elapsed time,
-  tokens and cost.
+- **Expanded** (click it) lists only the sessions running right now, with
+  subagents nested under the session that spawned them, each with its agent,
+  running tool, elapsed time, tokens and cost. Idle sessions stay out of the way.
 - **Approvals** open the island on their own and can be answered in place with
   Allow once, Always allow or Deny.
 

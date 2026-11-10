@@ -103,6 +103,7 @@
   }
 
   #rows { padding: 4px 0 6px; max-height: 280px; overflow-y: auto; }
+  #rows .empty { padding: 8px 17px 10px; color: var(--label-2); font-size: 12px; }
 
   .row {
     display: grid;
@@ -123,7 +124,6 @@
     border-radius: 50%;
     background: var(--green);
   }
-  .row .status.idle { background: var(--label-3); }
   .row .status.retry { background: var(--orange); }
   .row .status.waiting { background: var(--orange); }
 
@@ -262,10 +262,10 @@
   }
 
   function row(session, sub, now) {
-    var status = session.permission ? " waiting" : session.status === "busy" ? "" : session.status === "retry" ? " retry" : " idle";
+    var status = session.permission ? " waiting" : session.status === "retry" ? " retry" : "";
     var agent = session.agent && !sub ? '<span class="agent">' + escapeHtml(session.agent) + "</span>" : "";
     var tool = session.tool ? '<span class="tool">' + escapeHtml(session.tool) + "</span>" : "";
-    var right = sub ? (session.status === "idle" ? "done" : elapsed(now - session.updated)) : elapsed(now - session.created);
+    var right = elapsed(now - (sub ? session.updated : session.created));
     return (
       '<div class="row' + (sub ? " sub" : "") + '">' +
         '<span class="status' + status + '"></span>' +
@@ -310,13 +310,21 @@
     headTokens.textContent = totalTokens ? tokens(totalTokens) + " tokens" : "";
     headCost.textContent = money(totalCost);
 
-    // Top-level sessions, each followed by its subagents.
+    // Only what is running now: the island is a status display, not history.
+    var active = [];
+    for (i = 0; i < sessions.length; i++) {
+      var candidate = sessions[i];
+      if (candidate.status === "busy" || candidate.status === "retry" || candidate.permission) active.push(candidate);
+    }
+
+    // Each followed by its subagents. A subagent whose parent is not running
+    // stands on its own rather than disappearing with it.
     var byParent = {};
     var roots = [];
     var known = {};
-    for (i = 0; i < sessions.length; i++) known[sessions[i].id] = true;
-    for (i = 0; i < sessions.length; i++) {
-      var session = sessions[i];
+    for (i = 0; i < active.length; i++) known[active[i].id] = true;
+    for (i = 0; i < active.length; i++) {
+      var session = active[i];
       if (session.parentID && known[session.parentID]) {
         (byParent[session.parentID] = byParent[session.parentID] || []).push(session);
       } else {
@@ -330,7 +338,7 @@
       var kids = byParent[roots[i].id] || [];
       for (var k = 0; k < kids.length; k++) html += row(kids[k], true, now);
     }
-    rows.innerHTML = html;
+    rows.innerHTML = html || '<div class="empty">Nothing running</div>';
 
     // The first pending request is the one the buttons answer.
     var pending = null;
