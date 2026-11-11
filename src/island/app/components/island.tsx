@@ -13,7 +13,9 @@ import {
   Moon,
   Sun,
 } from "@phosphor-icons/react"
+import { ThinkingOrb } from "thinking-orbs"
 import type { IslandMessage, PermissionDecision, SessionView } from "../../../state"
+import { orbState } from "../../../orb"
 import { Button } from "@/components/ui/button"
 import { Toggle } from "@/components/ui/toggle"
 import { cn } from "@/lib/utils"
@@ -297,8 +299,10 @@ export function Island() {
         ? "Idle"
         : "No sessions"
 
-  const latest = latestOf(sessions)
-  const work = showLatest && !alert ? latest : undefined
+  const active = latestOf(sessions)
+  const work = showLatest && !alert ? active : undefined
+  /** The bar shows one orb, for the session it is also showing the words of. */
+  const barOrb = active ? orbState(active) : undefined
   const rows = rowsOf(sessions)
   const pending = sessions.find((session) => session.permission)?.permission
   const totalTokens = sessions.reduce((sum, session) => sum + (session.tokens || 0), 0)
@@ -414,7 +418,11 @@ export function Island() {
           >
             <DotsSixVertical size={14} weight="duotone" />
           </div>
-          <span className={cn("size-[7px] shrink-0 rounded-full transition-colors duration-300", dot)} />
+          {barOrb ? (
+            <ThinkingOrb state={barOrb} size={20} className="shrink-0" />
+          ) : (
+            <span className={cn("size-[7px] shrink-0 rounded-full transition-colors duration-300", dot)} />
+          )}
           {work ? (
             <>
               <span className="text-[12.5px] font-medium">
@@ -458,18 +466,23 @@ function Row({
 }) {
   const waiting = Boolean(session.permission)
   const muted = alert ? "text-warning-foreground/70" : "text-muted-foreground"
+  const orb = orbState(session)
 
   return (
     <div
       data-row
-      className={cn("grid grid-cols-[8px_1fr_auto] items-start gap-2.5 px-4 py-1.5", sub && "pl-9")}
+      className={cn("grid grid-cols-[20px_1fr_auto] items-start gap-2.5 px-4 py-1.5", sub && "pl-9")}
     >
-      <span
-        className={cn(
-          "mt-1 size-[7px] shrink-0 rounded-full",
-          waiting || session.status === "retry" ? "bg-warning" : "bg-success",
-        )}
-      />
+      {orb ? (
+        <ThinkingOrb state={orb} size={20} aria-hidden="true" className="shrink-0" />
+      ) : (
+        <span
+          className={cn(
+            "mt-1 size-[7px] shrink-0 rounded-full",
+            waiting || session.status === "retry" ? "bg-warning" : "bg-success",
+          )}
+        />
+      )}
       <div className="min-w-0">
         <div className={cn("truncate text-[12.5px]", sub && "text-xs", sub && muted)}>
           {!sub && session.agent ? <span className={cn("mr-1.5", muted)}>{session.agent}</span> : null}

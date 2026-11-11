@@ -44,7 +44,8 @@
     "check": "node scripts/check.ts"
   },
   "dependencies": {
-    "@opencode/plugin": "^2.2.7"
+    "@opencode/plugin": "^2.2.7",
+    "thinking-orbs": "^0.3.2"
   },
   "devDependencies": {
     "@phosphor-icons/react": "^2.1.10",
