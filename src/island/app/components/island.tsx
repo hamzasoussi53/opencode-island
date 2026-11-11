@@ -15,7 +15,7 @@ import {
 } from "@phosphor-icons/react"
 import { ThinkingOrb } from "thinking-orbs"
 import type { IslandMessage, PermissionDecision, SessionView } from "../../../state"
-import { orbState } from "../../../orb"
+import { barOrbState, orbState } from "../../../orb"
 import { Button } from "@/components/ui/button"
 import { Toggle } from "@/components/ui/toggle"
 import { cn } from "@/lib/utils"
@@ -301,8 +301,7 @@ export function Island() {
 
   const active = latestOf(sessions)
   const work = showLatest && !alert ? active : undefined
-  /** The bar shows one orb, for the session it is also showing the words of. */
-  const barOrb = active ? orbState(active) : undefined
+  const barOrb = barOrbState(active, alert)
   const rows = rowsOf(sessions)
   const pending = sessions.find((session) => session.permission)?.permission
   const totalTokens = sessions.reduce((sum, session) => sum + (session.tokens || 0), 0)
@@ -418,11 +417,14 @@ export function Island() {
           >
             <DotsSixVertical size={14} weight="duotone" />
           </div>
-          {barOrb ? (
-            <ThinkingOrb state={barOrb} size={20} className="shrink-0" />
-          ) : (
-            <span className={cn("size-[7px] shrink-0 rounded-full transition-colors duration-300", dot)} />
-          )}
+          {/* The slot keeps its size, so the bar does not change length. */}
+          <span className="flex size-5 shrink-0 items-center justify-center">
+            {barOrb ? (
+              <ThinkingOrb state={barOrb} size={20} className="shrink-0" />
+            ) : (
+              <span className={cn("size-[7px] shrink-0 rounded-full transition-colors duration-300", dot)} />
+            )}
+          </span>
           {work ? (
             <>
               <span className="text-[12.5px] font-medium">
@@ -474,12 +476,18 @@ function Row({
       className={cn("grid grid-cols-[20px_1fr_auto] items-start gap-2.5 px-4 py-1.5", sub && "pl-9")}
     >
       {orb ? (
-        <ThinkingOrb state={orb} size={20} aria-hidden="true" className="shrink-0" />
+        // A subagent row prints no phase, so its orb is the only word on it.
+        <ThinkingOrb
+          state={orb}
+          size={20}
+          aria-hidden={sub ? undefined : "true"}
+          className="shrink-0"
+        />
       ) : (
         <span
           className={cn(
-            "mt-1 size-[7px] shrink-0 rounded-full",
-            waiting || session.status === "retry" ? "bg-warning" : "bg-success",
+            "mt-1 size-[7px] shrink-0 justify-self-center rounded-full",
+            waiting ? "bg-warning" : "bg-success",
           )}
         />
       )}

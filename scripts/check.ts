@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { keepWords, lastWords } from "../src/model.ts"
-import { orbState } from "../src/orb.ts"
+import { barOrbState, orbState } from "../src/orb.ts"
 
 // The island shows the last ten words of an answer while it streams.
 assert.equal(lastWords("one two three", 10), "one two three")
@@ -30,5 +30,15 @@ assert.equal(orbState({ phase: "working", tool: "something-new" }), "working")
 assert.equal(orbState({ phase: "idle" }), undefined)
 assert.equal(orbState({ phase: "waiting" }), undefined)
 assert.equal(orbState({}), undefined)
+
+// A tool name is data from the wire, so it never gets to be a key of anything.
+assert.equal(orbState({ phase: "working", tool: "toString" }), "working")
+assert.equal(orbState({ phase: "working", tool: "__proto__" }), "working")
+assert.equal(orbState({ phase: "working", tool: "constructor" }), "working")
+
+// The bar keeps the warning dot for as long as an approval is waiting.
+assert.equal(barOrbState({ phase: "thinking" }, false), "breathing")
+assert.equal(barOrbState({ phase: "thinking" }, true), undefined)
+assert.equal(barOrbState(undefined, false), undefined)
 
 console.log("ok")
