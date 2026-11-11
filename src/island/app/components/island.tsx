@@ -369,6 +369,7 @@ export function Island() {
               onClick={() => setTheme(nextTheme(theme))}
               aria-label={`Appearance: ${theme}. Click for ${nextTheme(theme)}.`}
               title={`Appearance: ${theme}`}
+              className={cn(alert && "border-warning-foreground/30 bg-transparent hover:bg-warning-foreground/10")}
             >
               {theme === "light" ? (
                 <Sun weight="duotone" />
@@ -388,6 +389,7 @@ export function Island() {
               onPressedChange={setClickThrough}
               aria-label="Click through"
               title="Click through"
+              className={cn(alert && "border-warning-foreground/30 bg-transparent hover:bg-warning-foreground/10")}
             >
               <CursorClick weight="duotone" />
             </Toggle>
@@ -398,6 +400,7 @@ export function Island() {
               onPressedChange={setShowLatest}
               aria-label="Show latest work"
               title="Show latest work"
+              className={cn(alert && "border-warning-foreground/30 bg-transparent hover:bg-warning-foreground/10")}
             >
               <ListDashes weight="duotone" />
             </Toggle>

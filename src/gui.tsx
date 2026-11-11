@@ -32,6 +32,9 @@ export default Plugin.define({
       },
       onBlur: () => {
         if (!open) return
+        // An island that is asking for an answer stays up: the window never
+        // has focus, so the app taking focus back would close it mid-question.
+        if (state.sessions.some((session) => session.permission)) return
         open = false
         island.send(message())
       },
