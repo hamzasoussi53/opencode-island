@@ -107,7 +107,7 @@ Subagents appear indented under the session that spawned them.
 
 | Control | What it does |
 |---|---|
-| ☀️ 🌙 🖥 | Light, dark or follow the system appearance |
+| ☀️ 🌙 🖥 | Appearance, in one button: click it and it cycles light, dark, system |
 | 👆 | Click-through: the island stops taking clicks, except its grip, so you can still open it |
 | ☰ | Show the latest session's work in the closed tab instead of the summary |
 

@@ -16,12 +16,18 @@ import {
 import type { IslandMessage, PermissionDecision, SessionView } from "../../../state"
 import { Button } from "@/components/ui/button"
 import { Toggle } from "@/components/ui/toggle"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "@/lib/utils"
 
 const EMPTY: IslandMessage = { sessions: [], working: 0, waiting: 0, open: false }
 
 type Theme = "light" | "dark" | "system"
+
+/** The appearance button cycles through the three, one click each. */
+const THEMES: Theme[] = ["light", "dark", "system"]
+
+function nextTheme(theme: Theme): Theme {
+  return THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]
+}
 
 function elapsed(ms: number) {
   if (!ms || ms < 0) return ""
@@ -357,26 +363,21 @@ export function Island() {
           ) : null}
 
           <div className="flex items-center gap-1 border-t px-2 py-1.5">
-            <ToggleGroup
-              type="single"
-              size="sm"
+            <Button
               variant="outline"
-              value={theme}
-              onValueChange={(value) => {
-                if (value) setTheme(value as Theme)
-              }}
-              aria-label="Theme"
+              size="icon-sm"
+              onClick={() => setTheme(nextTheme(theme))}
+              aria-label={`Appearance: ${theme}. Click for ${nextTheme(theme)}.`}
+              title={`Appearance: ${theme}`}
             >
-              <ToggleGroupItem value="light" aria-label="Light" title="Light">
+              {theme === "light" ? (
                 <Sun weight="duotone" />
-              </ToggleGroupItem>
-              <ToggleGroupItem value="dark" aria-label="Dark" title="Dark">
+              ) : theme === "dark" ? (
                 <Moon weight="duotone" />
-              </ToggleGroupItem>
-              <ToggleGroupItem value="system" aria-label="System" title="System">
+              ) : (
                 <Monitor weight="duotone" />
-              </ToggleGroupItem>
-            </ToggleGroup>
+              )}
+            </Button>
 
             <span className="flex-1" />
 
