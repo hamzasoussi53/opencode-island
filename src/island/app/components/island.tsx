@@ -321,7 +321,7 @@ export function Island() {
         alert
           ? "border-warning bg-warning text-warning-foreground"
           : "border-border bg-background text-foreground",
-        open ? "w-[420px]" : share ? "h-full w-9" : "max-h-[520px] w-9",
+        open ? "w-[420px]" : share ? "h-full w-9" : "h-[240px] w-9",
       )}
     >
       {open ? (
@@ -410,7 +410,7 @@ export function Island() {
           </div>
         </div>
       ) : (
-        <div className="flex w-full items-center gap-2 px-2 pb-5 pt-3 [writing-mode:vertical-rl]">
+        <div className="flex h-full w-full items-center gap-2 px-2 pb-5 pt-3 [writing-mode:vertical-rl]">
           <div
             ref={handle}
             className={cn("flex size-5 shrink-0 items-center justify-center rounded-sm", muted)}
@@ -427,10 +427,14 @@ export function Island() {
           </span>
           {work ? (
             <>
-              <span className="text-[12.5px] font-medium">
-                {work.stream || trim(work.title || "Untitled session", 10)}
+              {/* The words fill the bar and are cut, never the bar. The newest
+                  ones stay in sight: the column ends at the bottom of it. */}
+              <span className="flex min-h-0 flex-1 justify-end overflow-hidden text-center">
+                <span className="shrink-0 whitespace-nowrap text-[12.5px] font-medium">
+                  {work.stream || trim(work.title || "Untitled session", 10)}
+                </span>
               </span>
-              {work.tool ? <span className={cn("text-xs", muted)}>{work.tool}</span> : null}
+              {work.tool ? <span className={cn("shrink-0 text-xs", muted)}>{work.tool}</span> : null}
             </>
           ) : (
             <span className="text-[12.5px] font-medium">{what}</span>
