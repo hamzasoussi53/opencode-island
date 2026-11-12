@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import { keepWords, lastWords } from "../src/model.ts"
 import { barOrbState, orbState } from "../src/orb.ts"
 
@@ -40,5 +41,12 @@ assert.equal(orbState({ phase: "working", tool: "constructor" }), "working")
 assert.equal(barOrbState({ phase: "thinking" }, false), "breathing")
 assert.equal(barOrbState({ phase: "thinking" }, true), undefined)
 assert.equal(barOrbState(undefined, false), undefined)
+
+// The Spaces call is macOS only, so it must stay behind a darwin guard.
+const windowSource = readFileSync(new URL("../src/window.ts", import.meta.url), "utf8")
+assert.match(
+  windowSource,
+  /process\.platform === "darwin"[\s\S]{0,120}setVisibleOnAllWorkspaces/,
+)
 
 console.log("ok")

@@ -50,6 +50,8 @@ export function createIslandWindow(options: IslandWindowOptions) {
   writeFileSync(page, islandHtml)
   writeFileSync(preload, islandPreload)
 
+  // roundedCorners, hiddenInMissionControl and acceptFirstMouse are macOS
+  // only; Electron ignores them elsewhere.
   const window = new BrowserWindow({
     width: 460,
     height: 240,
@@ -80,9 +82,12 @@ export function createIslandWindow(options: IslandWindowOptions) {
   })
 
   // Float above full-screen apps and every Space, without ever taking focus
-  // when it appears.
+  // when it appears. Spaces are macOS only: Windows hides the island on the
+  // virtual desktops it does not belong to, and no Electron API changes that.
   window.setAlwaysOnTop(true, "screen-saver")
-  window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  if (process.platform === "darwin") {
+    window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  }
 
   let size = { width: 460, height: 240 }
   // Where the tab's centre sits on the right edge; null means "middle".
