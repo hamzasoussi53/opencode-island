@@ -68,7 +68,11 @@ export function createIslandWindow(options: IslandWindowOptions) {
     minimizable: false,
     maximizable: false,
     fullscreenable: false,
-    skipTaskbar: true,
+    // The island must not take the app's taskbar button with it. A window
+    // that skips the taskbar is the app's only window here on some setups, and
+    // then OpenCode had no Dock or taskbar icon at all: there was nothing to
+    // right-click to close it.
+    skipTaskbar: false,
     acceptFirstMouse: true,
     hiddenInMissionControl: true,
     webPreferences: {
