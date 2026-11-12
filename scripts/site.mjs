@@ -94,7 +94,7 @@ const stub = `<script>
       working: waiting ? 3 : 4,
       waiting: waiting ? 1 : 0,
       // The drawer is 420px wide, so it only opens where it fits.
-      open: (q.get("demo") === "open" || waiting) && window.innerWidth >= 460,
+      open: (q.get("demo") === "open" || waiting) && window.innerWidth >= 430,
     }
   }
 

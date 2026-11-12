@@ -1,5 +1,7 @@
 # opencode-island
 
+<img src="docs/img/logo.png" width="220" alt="OpenCode Island" />
+
 A **Dynamic Island** for [OpenCode](https://opencode.ai), on macOS and Windows.
 Windows support is new: the island builds and runs there, and the limits
 below are the ones we know about. If something does not work on your machine,
@@ -8,6 +10,8 @@ please open an issue.
 It floats on the right edge of your screen and tells you what every session and
 agent on your machine is doing — and lets you answer a permission prompt
 without ever leaving the window you are working in.
+
+**→ [opencode-island.github.io](https://hamzasoussi53.github.io/opencode-island/)**
 
 ![The island expanded, showing a running session](docs/panel.png)
 
@@ -205,6 +209,10 @@ is React.
   remembered for the session only; they reset when the app restarts.
 - The island shows what the app's server knows. A session that never
   announces itself stays invisible.
+
+## Built by
+
+[Soussitech](https://www.soussitech.com/) — the island, the plugin and the page.
 
 ## License
 
