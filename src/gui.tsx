@@ -1,16 +1,19 @@
 import { OpenCode } from "@opencode/client"
 import { Plugin } from "@opencode/plugin/gui"
 import { createModel } from "./model"
+import { islandShouldExist } from "./lifecycle"
 import { createIslandWindow } from "./window"
 import type { IslandMessage, IslandState } from "./state"
 
 /**
  * The island lives in the desktop app's main process, not in a window.
  *
- * A window setup would stop when the last app window closes, which is exactly
- * when the island is most useful. Main also has `serverEndpoints`, so the
- * island can read the app's own server directly and sees sessions from every
- * project on the machine.
+ * Main also has `serverEndpoints`, so the island can read the app's own server
+ * directly and sees sessions from every project on the machine.
+ *
+ * It exists only while the app has a window of its own: the island must not
+ * outlive OpenCode, or it stays on the screen after the app is gone and keeps
+ * its process alive. It comes back with the next window.
  */
 export default Plugin.define({
   main(ctx) {
@@ -20,32 +23,58 @@ export default Plugin.define({
     let model: ReturnType<typeof createModel> | undefined
     let controller: AbortController | undefined
     let connected = ""
+    let island: ReturnType<typeof createIslandWindow> | undefined
 
     const message = (): IslandMessage => ({ ...state, open })
+    const send = () => island?.send(message())
 
-    const island = createIslandWindow({
-      log: (level, text, data) => ctx.log.write(level, text, data),
-      onReady: () => island.send(message()),
-      onToggle: () => {
-        open = !open
-        island.send(message())
-      },
-      onBlur: () => {
-        if (!open) return
-        // An island that is asking for an answer stays up: the window never
-        // has focus, so the app taking focus back would close it mid-question.
-        if (state.sessions.some((session) => session.permission)) return
-        open = false
-        island.send(message())
-      },
-      onReply: (reply) => {
-        open = false
-        island.send(message())
-        void model?.reply(reply).catch((error: unknown) => {
-          ctx.log.write("warn", "island permission reply failed", { error: String(error) })
-        })
-      },
+    const create = () => {
+      if (island) return
+      island = createIslandWindow({
+        log: (level, text, data) => ctx.log.write(level, text, data),
+        onReady: () => send(),
+        onToggle: () => {
+          open = !open
+          send()
+        },
+        onBlur: () => {
+          if (!open) return
+          // An island that is asking for an answer stays up: the window never
+          // has focus, so the app taking focus back would close it mid-question.
+          if (state.sessions.some((session) => session.permission)) return
+          open = false
+          send()
+        },
+        onReply: (reply) => {
+          open = false
+          send()
+          void model?.reply(reply).catch((error: unknown) => {
+            ctx.log.write("warn", "island permission reply failed", { error: String(error) })
+          })
+        },
+      })
+    }
+
+    const destroy = () => {
+      island?.dispose()
+      island = undefined
+    }
+
+    // The app's own windows, counted so the island can follow them.
+    const windows = new Set(ctx.windows.list().map((window) => window.id))
+    const sync = () => {
+      if (islandShouldExist(windows.size)) create()
+      else destroy()
+    }
+    ctx.windows.on("open", (window) => {
+      windows.add(window.id)
+      sync()
     })
+    ctx.windows.on("close", (window) => {
+      windows.delete(window.id)
+      sync()
+    })
+    sync()
 
     // The sidecar appears after startup and moves when it restarts, so the
     // endpoint is followed rather than read once. A restart keeps the URL but
@@ -65,7 +94,7 @@ export default Plugin.define({
           if (next.waiting > lastWaiting) open = true
           lastWaiting = next.waiting
           state = next
-          island.send(message())
+          send()
         },
       )
       model.start(controller.signal)
@@ -78,7 +107,7 @@ export default Plugin.define({
     return () => {
       clearInterval(timer)
       controller?.abort()
-      island.dispose()
+      destroy()
     }
   },
 })

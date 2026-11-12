@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { keepWords, lastWords } from "../src/model.ts"
+import { islandShouldExist } from "../src/lifecycle.ts"
 import { barOrbState, orbState } from "../src/orb.ts"
 
 // The island shows the last ten words of an answer while it streams.
@@ -50,5 +51,10 @@ const windowSource = readFileSync(new URL("../src/window.ts", import.meta.url), 
 // The island must not take the app's taskbar button with it, or there is
 // nothing to right-click to close OpenCode.
 assert.match(windowSource, /skipTaskbar: false/)
+
+// The island exists while the app has a window, and not one moment longer.
+assert.equal(islandShouldExist(0), false)
+assert.equal(islandShouldExist(1), true)
+assert.equal(islandShouldExist(3), true)
 
 console.log("ok")
