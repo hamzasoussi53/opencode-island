@@ -291,6 +291,13 @@ export function Island() {
   const muted = alert ? "text-warning-foreground/70" : "text-muted-foreground"
   const resolved = theme === "system" ? (systemDark ? "dark" : "light") : theme
 
+  // Chromium paints its canvas with the page's colour scheme wherever the page
+  // paints nothing, and the tab's rounded corners are exactly such a place:
+  // without this they showed as white corners on the screen edge.
+  useEffect(() => {
+    document.documentElement.style.colorScheme = resolved
+  }, [resolved])
+
   const what = alert
     ? `${waiting} approval${waiting === 1 ? "" : "s"} needed`
     : working > 0

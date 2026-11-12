@@ -85,6 +85,12 @@ export function createIslandWindow(options: IslandWindowOptions) {
     },
   })
 
+  // The window paints white where the page paints nothing, and the tab's
+  // rounded corners are exactly that: a sliver of white instead of the
+  // desktop behind it. Electron's own default is opaque white, so it has to
+  // be told to be transparent after the window exists.
+  window.setBackgroundColor("#00000000")
+
   // Float above full-screen apps and every Space, without ever taking focus
   // when it appears. Electron does nothing with setVisibleOnAllWorkspaces on
   // Windows, so the guard below is documentation rather than a fix: Windows
