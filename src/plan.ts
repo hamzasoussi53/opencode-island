@@ -70,6 +70,23 @@ function withInHand(plan: PlanStep[] | undefined, state: PlanState): PlanStep[] 
 }
 
 /**
+ * The plan, out of a tool that ran the island's tool inside it. Such a tool
+ * reports the calls it made in its metadata, and there the plan is named, so
+ * the island finds it there and not only on a call of its own.
+ */
+export function nestedPlan(metadata: unknown): PlanStep[] | undefined {
+  const calls = (metadata as { toolCalls?: unknown } | null | undefined)?.toolCalls
+  if (!Array.isArray(calls)) return undefined
+  for (const call of calls) {
+    const item = (call ?? {}) as { tool?: unknown; input?: unknown }
+    if (item.tool !== PLAN_TOOL) continue
+    const plan = parseSteps(item.input)
+    if (plan.length) return plan
+  }
+  return undefined
+}
+
+/**
  * The step the agent was on is the one that failed. A plan with nothing in
  * hand is left as it is.
  */

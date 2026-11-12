@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { createModel, keepWords, lastWords } from "../src/model.ts"
-import { failPlan, looksLikePlan, parseSteps, planWindow, stopPlan } from "../src/plan.ts"
+import { failPlan, looksLikePlan, nestedPlan, parseSteps, planWindow, stopPlan } from "../src/plan.ts"
 import { installPlanRule, planRule } from "../src/rules.ts"
 import { islandShouldExist } from "../src/lifecycle.ts"
 import { barOrbState, orbState } from "../src/orb.ts"
@@ -119,6 +119,26 @@ assert.equal(looksLikePlan({ steps: [] }), false)
 assert.equal(looksLikePlan({ steps: "not a list" }), false)
 assert.equal(looksLikePlan({}), false)
 assert.equal(looksLikePlan(undefined), false)
+
+// A tool that ran the island's tool inside it reports the call in its
+// metadata, and the plan is found there.
+assert.deepEqual(
+  nestedPlan({
+    toolCalls: [
+      { tool: "shell", status: "completed", input: { command: "ls" } },
+      {
+        tool: "island_plan",
+        status: "completed",
+        input: { steps: [{ title: "Read it", state: "working" }] },
+      },
+    ],
+  }),
+  [{ n: 1, title: "Read it", state: "working" }],
+)
+assert.equal(nestedPlan({ toolCalls: [{ tool: "shell", status: "completed" }] }), undefined)
+assert.equal(nestedPlan({ toolCalls: "not a list" }), undefined)
+assert.equal(nestedPlan({}), undefined)
+assert.equal(nestedPlan(undefined), undefined)
 
 // The bar shows the steps around the one in hand, in order.
 const steps = (...states: PlanState[]) =>
@@ -290,6 +310,29 @@ const retired = await run([
   planCall("t9", { steps: [] }),
 ])
 assert.deepEqual(retired.sessions[0]?.plan, [])
+
+// A tool that ran the island's tool inside it brings the plan with it.
+const nested = await run([
+  created,
+  started("t10", "execute"),
+  {
+    type: "session.tool.success",
+    data: {
+      sessionID: "s1",
+      id: "t10",
+      metadata: {
+        toolCalls: [
+          {
+            tool: "island_plan",
+            status: "completed",
+            input: { steps: [{ title: "Read it", state: "working" }] },
+          },
+        ],
+      },
+    },
+  },
+])
+assert.deepEqual(nested.sessions[0]?.plan, [{ n: 1, title: "Read it", state: "working" }])
 
 // The island must not take the app's taskbar button with it, or there is
 // nothing to right-click to close OpenCode. It is a window option, so the

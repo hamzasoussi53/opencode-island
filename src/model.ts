@@ -1,5 +1,5 @@
 import type { OpenCode } from "@opencode/client"
-import { PLAN_TOOL, failPlan, looksLikePlan, parseSteps, stopPlan } from "./plan.ts"
+import { PLAN_TOOL, failPlan, looksLikePlan, nestedPlan, parseSteps, stopPlan } from "./plan.ts"
 import type {
   IslandState,
   PermissionDecision,
@@ -82,7 +82,11 @@ type Watched =
       data: { sessionID: string; id: string; name: string }
     }
   | {
-      type: "session.tool.success" | "session.tool.failed"
+      type: "session.tool.success"
+      data: { sessionID: string; id: string; metadata?: unknown }
+    }
+  | {
+      type: "session.tool.failed"
       data: { sessionID: string; id: string }
     }
   | {
@@ -368,7 +372,18 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
             }
             break
           }
-          case "session.tool.success":
+          case "session.tool.success": {
+            const data = event.data
+            const entry = sessions.get(data.sessionID)
+            if (!entry) break
+            entry.tools.delete(data.id)
+            entry.tool = runningTool(entry)
+            // A tool that ran the island's tool inside it reports the call in
+            // its metadata, so the plan is found there too.
+            const plan = nestedPlan(data.metadata)
+            if (plan) touch(data.sessionID, { plan })
+            break
+          }
           case "session.tool.failed": {
             const data = event.data
             const entry = sessions.get(data.sessionID)
