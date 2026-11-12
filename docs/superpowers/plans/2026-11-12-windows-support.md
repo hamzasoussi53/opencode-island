@@ -90,12 +90,14 @@ Open the desktop app's log and look for the two lines the plugin writes (`ctx.lo
 Add at the end of `scripts/check.ts`, above the `console.log("ok")`:
 
 ```ts
-// The Spaces call is macOS only, so it must stay behind a darwin guard.
+// The Spaces call is macOS only, so it must stay behind a darwin guard, and
+// there must be no second, unguarded call site.
 const windowSource = readFileSync(new URL("../src/window.ts", import.meta.url), "utf8")
 assert.match(
   windowSource,
-  /process\.platform === "darwin"[\s\S]{0,120}setVisibleOnAllWorkspaces/,
+  /if \(process\.platform === "darwin"\) \{\s*window\.setVisibleOnAllWorkspaces/,
 )
+assert.equal(windowSource.match(/window\.setVisibleOnAllWorkspaces\(/g)?.length, 1)
 ```
 
 and add `import { readFileSync } from "node:fs"` to the imports at the top of the file.
@@ -187,8 +189,8 @@ Create `.github/workflows/ci.yml`:
 name: CI
 
 on:
+  # Every branch, so a feature branch shows the Windows job before it merges.
   push:
-    branches: [main]
   pull_request:
 
 jobs:
@@ -310,8 +312,9 @@ apps. On macOS it floats above full-screen apps and every Space too.
 After the `ln -s` block in "From source", add:
 
 ```
-On Windows the symlink needs Developer Mode or an elevated shell.
-`opencode plugin add github:hamzasoussi53/opencode-island` avoids it.
+On Windows the symlink needs Developer Mode or an elevated shell, and in Git
+Bash `ln -s` copies the folder instead, so the plugin stops updating.
+`opencode plugin add github:hamzasoussi53/opencode-island` avoids all of it.
 ```
 
 - [ ] **Step 6: Replace the macOS-only limit with the two Windows limits**
@@ -331,6 +334,15 @@ with:
   changes that. A game in exclusive full screen covers the island too; a
   borderless full-screen window does not.
 ```
+
+- [ ] **Step 6b: Say where the drawer slides and where it snaps**
+
+In "How it works", the sentence about the window animating to the page's size
+becomes: the window animates to it as a drawer sliding out of the screen edge
+on macOS, and snaps to it on Windows.
+
+In "Develop", the comment on `npm run check` becomes: the streaming tail
+helpers and the platform guard.
 
 - [ ] **Step 7: Read the README top to bottom and check nothing else claims macOS only**
 

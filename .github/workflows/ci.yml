@@ -1,8 +1,8 @@
 name: CI
 
 on:
+  # Every branch, so a feature branch shows the Windows job before it merges.
   push:
-    branches: [main]
   pull_request:
 
 jobs:

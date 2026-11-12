@@ -71,11 +71,13 @@ Nothing else in the plugin changes.
 
 ### CI
 
-A GitHub Actions workflow with `ubuntu-latest` and `windows-latest` jobs that
+A GitHub Actions workflow with `macos-latest` and `windows-latest` jobs that
 run `npm ci --ignore-scripts` (the Electron binary download is not needed to
-build), `npm run typecheck`, `npm run build` and `npm run check`. The repo has
-no CI today, so this is the first workflow. Node 24, because `npm run check`
-runs a TypeScript file directly and needs type stripping.
+build), `npm run typecheck`, `npm run build` and `npm run check`. It runs on
+every branch push and every pull request, so a feature branch shows the
+Windows job before it merges. The repo has no CI today, so this is the first
+workflow. Node 24, because `npm run check` runs a TypeScript file directly and
+needs type stripping.
 
 ### Docs
 

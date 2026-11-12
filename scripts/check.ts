@@ -42,11 +42,13 @@ assert.equal(barOrbState({ phase: "thinking" }, false), "breathing")
 assert.equal(barOrbState({ phase: "thinking" }, true), undefined)
 assert.equal(barOrbState(undefined, false), undefined)
 
-// The Spaces call is macOS only, so it must stay behind a darwin guard.
+// The Spaces call is macOS only, so it must stay behind a darwin guard, and
+// there must be no second, unguarded call site.
 const windowSource = readFileSync(new URL("../src/window.ts", import.meta.url), "utf8")
 assert.match(
   windowSource,
-  /process\.platform === "darwin"[\s\S]{0,120}setVisibleOnAllWorkspaces/,
+  /if \(process\.platform === "darwin"\) \{\s*window\.setVisibleOnAllWorkspaces/,
 )
+assert.equal(windowSource.match(/window\.setVisibleOnAllWorkspaces\(/g)?.length, 1)
 
 console.log("ok")

@@ -67,8 +67,9 @@ npm run build
 ln -s "$PWD" ~/.config/opencode/plugins/opencode-island
 ```
 
-On Windows the symlink needs Developer Mode or an elevated shell.
-`opencode plugin add github:hamzasoussi53/opencode-island` avoids it.
+On Windows the symlink needs Developer Mode or an elevated shell, and in Git
+Bash `ln -s` copies the folder instead, so the plugin stops updating.
+`opencode plugin add github:hamzasoussi53/opencode-island` avoids all of it.
 
 `--ignore-scripts` skips Electron's ~100 MB binary download. The plugin only
 needs Electron's type declarations to build; the desktop app supplies the
@@ -163,8 +164,8 @@ island makes no network requests of its own and loads nothing from disk.
 
 The window is frameless, transparent and always on top. It is sized by the
 page: the page measures itself and asks the window for that size, and the
-window animates to it as a drawer sliding out of the screen edge. The island
-never takes focus when it appears.
+window animates to it as a drawer sliding out of the screen edge on macOS,
+and snaps to it on Windows. The island never takes focus when it appears.
 
 ## Develop
 
@@ -172,7 +173,7 @@ never takes focus when it appears.
 npm install         # --ignore-scripts also works, and skips Electron's binary
 npm run dev         # build the island, then watch the plugin bundle
 npm run typecheck   # the plugin and the island, separately
-npm run check       # the streaming tail helpers
+npm run check       # the streaming tail helpers and the platform guard
 ```
 
 The desktop app hot-reloads the plugin when `dist/gui-experimental.cjs`
