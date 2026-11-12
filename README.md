@@ -1,10 +1,14 @@
 # opencode-island
 
+<img src="docs/img/logo.png" width="220" alt="OpenCode Island" />
+
 A macOS **Dynamic Island** for [OpenCode](https://opencode.ai).
 
 It floats on the right edge of your screen and tells you what every session and
 agent on your machine is doing — and lets you answer a permission prompt
 without ever leaving the window you are working in.
+
+**→ [opencode-island.github.io](https://hamzasoussi53.github.io/opencode-island/)**
 
 ![The island expanded, showing a running session](docs/panel.png)
 
@@ -187,6 +191,10 @@ is React.
   remembered for the session only; they reset when the app restarts.
 - The island shows what the app's server knows. A session that never
   announces itself stays invisible.
+
+## Built by
+
+[Soussitech](https://www.soussitech.com/) — the island, the plugin and the page.
 
 ## License
 
