@@ -427,9 +427,9 @@ export function Island() {
           </span>
           {work ? (
             <>
-              {/* The words fill the bar and are cut, never the bar. The newest
-                  ones stay in sight: the column ends at the bottom of it. */}
-              <span className="flex min-h-0 flex-1 justify-end overflow-hidden text-center">
+              {/* The words fill the bar and are cut, never the bar. They start
+                  under the dot and run down, so the bar keeps its length. */}
+              <span className="flex min-h-0 flex-1 justify-start overflow-hidden text-center">
                 <span className="shrink-0 whitespace-nowrap text-[12.5px] font-medium">
                   {work.stream || trim(work.title || "Untitled session", 10)}
                 </span>
