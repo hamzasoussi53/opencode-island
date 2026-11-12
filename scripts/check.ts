@@ -2,12 +2,12 @@ import assert from "node:assert/strict"
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { keepWords, lastWords } from "../src/model.ts"
+import { createModel, keepWords, lastWords } from "../src/model.ts"
 import { failPlan, parseSteps, planWindow } from "../src/plan.ts"
 import { installPlanRule, planRule } from "../src/rules.ts"
 import { islandShouldExist } from "../src/lifecycle.ts"
 import { barOrbState, orbState } from "../src/orb.ts"
-import type { PlanState } from "../src/state.ts"
+import type { IslandState, PlanState } from "../src/state.ts"
 
 // The island shows the last ten words of an answer while it streams.
 assert.equal(lastWords("one two three", 10), "one two three")
@@ -115,6 +115,54 @@ assert.ok(after.startsWith("# Global instructions\n\nBrowser work runs through b
 assert.ok(after.includes(planRule()))
 assert.equal(installPlanRule(file), false)
 assert.equal(readFileSync(file, "utf8"), after)
+
+// The plan reaches the island from the tool call, which carries no name.
+const stream = [
+  {
+    type: "session.created",
+    created: Date.now(),
+    data: { sessionID: "s1", title: "Work", agent: "build", location: { directory: "/tmp" } },
+  },
+  { type: "session.tool.input.started", data: { sessionID: "s1", id: "t1", name: "island_plan" } },
+  {
+    type: "session.tool.called",
+    data: {
+      sessionID: "s1",
+      id: "t1",
+      input: {
+        steps: [
+          { title: "Read it", state: "done" },
+          { title: "Write it", state: "working" },
+        ],
+      },
+    },
+  },
+]
+
+const fake = {
+  session: { list: async () => ({ data: [] }) },
+  permission: { request: { list: async () => ({ data: [] }) } },
+  event: {
+    subscribe: () => ({
+      async *[Symbol.asyncIterator]() {
+        for (const event of stream) yield event
+      },
+    }),
+  },
+}
+
+let seen: IslandState | undefined
+const controller = new AbortController()
+createModel(fake as never, (state) => {
+  seen = state
+}).start(controller.signal)
+await new Promise((resolve) => setTimeout(resolve, 50))
+controller.abort()
+assert.ok(seen, "the model never published a state")
+assert.deepEqual(seen.sessions[0]?.plan, [
+  { n: 1, title: "Read it", state: "done" },
+  { n: 2, title: "Write it", state: "working" },
+])
 
 // The island must not take the app's taskbar button with it, or there is
 // nothing to right-click to close OpenCode. It is a window option, so the
