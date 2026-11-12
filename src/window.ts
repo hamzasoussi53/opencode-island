@@ -36,6 +36,10 @@ export interface IslandWindowOptions {
   /** The island lost focus, so it should contract. */
   onBlur: () => void
   onReply: (reply: Reply) => void
+  /** Bring the OpenCode window to the front. */
+  onOpenApp: () => void
+  /** Close the island and OpenCode with it. */
+  onQuit: () => void
   log: (
     level: "debug" | "info" | "warn" | "error",
     message: string,
@@ -221,6 +225,18 @@ export function createIslandWindow(options: IslandWindowOptions) {
     return { width: area.width, height: area.height }
   }
 
+  // Bring the OpenCode window forward, so the user can go back to it.
+  const onOpenApp = (event: Electron.IpcMainEvent) => {
+    if (!ours(event.sender)) return
+    options.onOpenApp()
+  }
+
+  // Close the island and OpenCode together.
+  const onQuit = (event: Electron.IpcMainEvent) => {
+    if (!ours(event.sender)) return
+    options.onQuit()
+  }
+
   ipcMain.on(`${CHANNEL}:ready`, onReady)
   ipcMain.on(`${CHANNEL}:size`, onSize)
   ipcMain.on(`${CHANNEL}:toggle`, onToggle)
@@ -231,6 +247,8 @@ export function createIslandWindow(options: IslandWindowOptions) {
   ipcMain.on(`${CHANNEL}:resize-start`, onResizeStart)
   ipcMain.on(`${CHANNEL}:resize`, onResize)
   ipcMain.on(`${CHANNEL}:resize-end`, onResizeEnd)
+  ipcMain.on(`${CHANNEL}:open-app`, onOpenApp)
+  ipcMain.on(`${CHANNEL}:quit`, onQuit)
   ipcMain.handle(`${CHANNEL}:screen`, onScreen)
 
   window.on("blur", () => options.onBlur())
@@ -252,6 +270,8 @@ export function createIslandWindow(options: IslandWindowOptions) {
   void window.loadFile(page)
 
   return {
+    /** The island's own window, so the app's windows can be told apart from it. */
+    id: window.id,
     send(message: IslandMessage) {
       if (window.isDestroyed()) return
       window.webContents.send(`${CHANNEL}:state`, message)
@@ -267,6 +287,8 @@ export function createIslandWindow(options: IslandWindowOptions) {
       ipcMain.removeListener(`${CHANNEL}:resize-start`, onResizeStart)
       ipcMain.removeListener(`${CHANNEL}:resize`, onResize)
       ipcMain.removeListener(`${CHANNEL}:resize-end`, onResizeEnd)
+      ipcMain.removeListener(`${CHANNEL}:open-app`, onOpenApp)
+      ipcMain.removeListener(`${CHANNEL}:quit`, onQuit)
       ipcMain.removeHandler(`${CHANNEL}:screen`)
       screen.removeListener("display-metrics-changed", onDisplaysChanged)
       screen.removeListener("display-added", onDisplaysChanged)

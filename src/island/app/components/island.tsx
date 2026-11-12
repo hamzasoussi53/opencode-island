@@ -11,6 +11,7 @@ import {
   ListDashes,
   Monitor,
   Moon,
+  Power,
   Sun,
 } from "@phosphor-icons/react"
 import { ThinkingOrb } from "thinking-orbs"
@@ -96,6 +97,16 @@ function rowsOf(sessions: SessionView[]) {
     for (const child of children.get(root.id) ?? []) rows.push({ session: child, sub: true })
   }
   return rows
+}
+
+/** OpenCode's own mark, taken from opencode.ai. */
+function OpenCodeMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 240 300" className={className} fill="none" aria-hidden="true">
+      <path d="M180 240H60V120H180V240Z" fill="currentColor" />
+      <path d="M180 60H60V240H180V60ZM240 300H0V0H240V300Z" fill="currentColor" fillRule="evenodd" />
+    </svg>
+  )
 }
 
 export function Island() {
@@ -392,6 +403,31 @@ export function Island() {
 
             <span className="flex-1" />
 
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={() => window.island.openApp()}
+              aria-label="Open OpenCode"
+              title="Open OpenCode"
+              className={cn(alert && "border-warning-foreground/30 bg-transparent hover:bg-warning-foreground/10")}
+            >
+              <OpenCodeMark className="size-3.5" />
+            </Button>
+
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={() => window.island.quit()}
+              aria-label="Close OpenCode and the island"
+              title="Close OpenCode and the island"
+              className={cn(
+                "text-destructive hover:bg-destructive/15 hover:text-destructive",
+                alert && "border-warning-foreground/30 bg-transparent hover:bg-warning-foreground/10",
+              )}
+            >
+              <Power weight="duotone" />
+            </Button>
+
             <Toggle
               size="sm"
               variant="outline"
@@ -417,7 +453,7 @@ export function Island() {
           </div>
         </div>
       ) : (
-        <div className="flex h-full w-full items-center gap-2 px-2 pb-5 pt-3 [writing-mode:vertical-rl]">
+        <div className="flex h-full w-full items-center gap-2 px-2 pb-[68px] pt-3 [writing-mode:vertical-rl]">
           <div
             ref={handle}
             className={cn("flex size-5 shrink-0 items-center justify-center rounded-sm", muted)}
@@ -446,6 +482,38 @@ export function Island() {
           ) : (
             <span className="text-[12.5px] font-medium">{what}</span>
           )}
+          {/* The two actions sit at the foot of the bar, above the resize grip.
+              The bar is written vertically, so a row runs down it. */}
+          <span className="flex shrink-0 flex-row items-center gap-1.5">
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={() => window.island.openApp()}
+              aria-label="Open OpenCode"
+              title="Open OpenCode"
+              className={cn(
+                "size-5",
+                alert && "border-warning-foreground/30 bg-transparent hover:bg-warning-foreground/10",
+              )}
+            >
+              <OpenCodeMark className="size-3" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={() => window.island.quit()}
+              aria-label="Close OpenCode and the island"
+              title="Close OpenCode and the island"
+              className={cn(
+                "size-5 text-destructive hover:bg-destructive/15 hover:text-destructive",
+                alert && "border-warning-foreground/30 bg-transparent hover:bg-warning-foreground/10",
+              )}
+            >
+              <Power size={12} weight="duotone" />
+            </Button>
+          </span>
         </div>
       )}
 

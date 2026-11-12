@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld("island", {
   resizeStart: () => ipcRenderer.send("opencode-island:resize-start"),
   resize: (screenY) => ipcRenderer.send("opencode-island:resize", screenY),
   resizeEnd: () => ipcRenderer.send("opencode-island:resize-end"),
+  openApp: () => ipcRenderer.send("opencode-island:open-app"),
+  quit: () => ipcRenderer.send("opencode-island:quit"),
   screen: () => ipcRenderer.invoke("opencode-island:screen"),
   onState: (handler) => ipcRenderer.on("opencode-island:state", (_event, state) => handler(state)),
 })

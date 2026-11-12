@@ -1,5 +1,6 @@
 import { OpenCode } from "@opencode/client"
 import { Plugin } from "@opencode/plugin/gui"
+import { app } from "electron"
 import { createModel } from "./model"
 import { islandShouldExist } from "./lifecycle"
 import { createIslandWindow } from "./window"
@@ -51,6 +52,22 @@ export default Plugin.define({
           void model?.reply(reply).catch((error: unknown) => {
             ctx.log.write("warn", "island permission reply failed", { error: String(error) })
           })
+        },
+        onOpenApp: () => {
+          // The island floats above everything and never takes focus, so this is
+          // the way back to the app itself. The island's own window is not in
+          // the list, but its id is checked so it can never be the one focused.
+          for (const window of ctx.windows.list()) {
+            if (window.id === island?.id) continue
+            if (window.isMinimized()) window.restore()
+            window.show()
+            window.focus()
+          }
+        },
+        onQuit: () => {
+          // The island and OpenCode are one process, so quitting the app is
+          // what closes the island too.
+          app.quit()
         },
       })
     }

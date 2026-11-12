@@ -13,6 +13,8 @@ declare global {
       resizeStart: () => void
       resize: (screenY: number) => void
       resizeEnd: () => void
+      openApp: () => void
+      quit: () => void
       screen: () => Promise<{ width: number; height: number }>
       onState: (handler: (state: IslandMessage) => void) => void
     }

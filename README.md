@@ -127,8 +127,13 @@ Subagents appear indented under the session that spawned them.
 | Control | What it does |
 |---|---|
 | ☀️ 🌙 🖥 | Appearance, in one button: click it and it cycles light, dark, system |
+| ⬛ | Open OpenCode: the island floats above everything and never takes focus, so this brings the app back to the front |
+| ⏻ | Close everything: the island and OpenCode both go |
 | 👆 | Click-through: the island stops taking clicks, except its grip, so you can still open it |
 | ☰ | Show the latest session's work in the closed tab instead of the summary |
+
+The two first buttons are also in the closed tab, at the foot of the spine
+above the grip that resizes it.
 
 ### Approvals
 
