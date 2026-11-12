@@ -411,7 +411,7 @@ export function Island() {
               title="Open OpenCode"
               className={cn(alert && "border-warning-foreground/30 bg-transparent hover:bg-warning-foreground/10")}
             >
-              <OpenCodeMark className="size-3.5" />
+              <OpenCodeMark className="h-4 w-[13px]" />
             </Button>
 
             <Button
@@ -453,7 +453,7 @@ export function Island() {
           </div>
         </div>
       ) : (
-        <div className="flex h-full w-full items-center gap-2 px-2 pb-[68px] pt-3 [writing-mode:vertical-rl]">
+        <div className="flex h-full w-full items-center gap-2 px-2 pb-6 pt-3 [writing-mode:vertical-rl]">
           <div
             ref={handle}
             className={cn("flex size-5 shrink-0 items-center justify-center rounded-sm", muted)}
@@ -480,7 +480,10 @@ export function Island() {
               {work.tool ? <span className={cn("shrink-0 text-xs", muted)}>{work.tool}</span> : null}
             </>
           ) : (
-            <span className="text-[12.5px] font-medium">{what}</span>
+            /* The filler keeps the words under the dot and the buttons at the foot. */
+            <span className="flex min-h-0 flex-1 justify-start overflow-hidden">
+              <span className="shrink-0 whitespace-nowrap text-[12.5px] font-medium">{what}</span>
+            </span>
           )}
           {/* The two actions sit at the foot of the bar, above the resize grip.
               The bar is written vertically, so a row runs down it. */}
@@ -497,7 +500,7 @@ export function Island() {
                 alert && "border-warning-foreground/30 bg-transparent hover:bg-warning-foreground/10",
               )}
             >
-              <OpenCodeMark className="size-3" />
+              <OpenCodeMark className="h-3.5 w-[11px]" />
             </Button>
             <Button
               variant="outline"
