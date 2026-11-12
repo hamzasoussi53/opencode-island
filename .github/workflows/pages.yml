@@ -1,8 +1,8 @@
 name: Pages
 
 on:
-  push:
-    branches: [main]
+  # The site is published by scripts/pages.sh while the account's Actions are
+  # locked; this workflow is here for when they run again.
   workflow_dispatch:
 
 permissions:
