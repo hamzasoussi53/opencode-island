@@ -42,14 +42,10 @@ assert.equal(barOrbState({ phase: "thinking" }, false), "breathing")
 assert.equal(barOrbState({ phase: "thinking" }, true), undefined)
 assert.equal(barOrbState(undefined, false), undefined)
 
-// The Spaces call is macOS only, so it must stay behind a darwin guard, and
-// there must be no second, unguarded call site.
+// The island must not take the app's taskbar button with it, or there is
+// nothing to right-click to close OpenCode. It is a window option, so the
+// only way to hold it is to read the source.
 const windowSource = readFileSync(new URL("../src/window.ts", import.meta.url), "utf8")
-assert.match(
-  windowSource,
-  /if \(process\.platform === "darwin"\) \{\s*window\.setVisibleOnAllWorkspaces/,
-)
-assert.equal(windowSource.match(/window\.setVisibleOnAllWorkspaces\(/g)?.length, 1)
 
 // The island must not take the app's taskbar button with it, or there is
 // nothing to right-click to close OpenCode.

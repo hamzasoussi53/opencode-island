@@ -1,6 +1,9 @@
 # opencode-island
 
 A **Dynamic Island** for [OpenCode](https://opencode.ai), on macOS and Windows.
+Windows support is new: the island builds and runs there, and the limits
+below are the ones we know about. If something does not work on your machine,
+please open an issue.
 
 It floats on the right edge of your screen and tells you what every session and
 agent on your machine is doing — and lets you answer a permission prompt
@@ -26,9 +29,9 @@ without ever leaving the window you are working in.
 | | |
 |---|---|
 | macOS | 13 or newer |
-| Windows | 10 or newer (x64 or ARM64) |
+| Windows | 10 or newer, x64 (ARM64 is untested) |
 | OpenCode | 2.2.7 or newer (the GUI plugin API) |
-| Node | 20.19 or newer (only if you build from source) |
+| Node | 22.18 or newer to build from source, 24 or newer to run `npm run check` |
 
 The island is a plugin: it uses an Electron window that floats above other
 apps. On macOS it floats above full-screen apps and every Space too.
@@ -192,6 +195,12 @@ is React.
   Windows hides windows that belong to another desktop, and no Electron API
   changes that. A game in exclusive full screen covers the island too; a
   borderless full-screen window does not.
+- On Windows the island sits at the top of the always-on-top stack, so it
+  floats over other floating windows too, and the drawer snaps open instead
+  of sliding.
+- On Windows the click-through grip stops working while an elevated window
+  has the focus: Windows does not forward mouse moves to a lower-privilege
+  app.
 - The island's spot along the edge, its appearance and its switches are
   remembered for the session only; they reset when the app restarts.
 - The island shows what the app's server knows. A session that never

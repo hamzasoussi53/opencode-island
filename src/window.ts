@@ -86,8 +86,10 @@ export function createIslandWindow(options: IslandWindowOptions) {
   })
 
   // Float above full-screen apps and every Space, without ever taking focus
-  // when it appears. Spaces are macOS only: Windows hides the island on the
-  // virtual desktops it does not belong to, and no Electron API changes that.
+  // when it appears. Electron does nothing with setVisibleOnAllWorkspaces on
+  // Windows, so the guard below is documentation rather than a fix: Windows
+  // hides the island on the virtual desktops it does not belong to, and no
+  // Electron API changes that.
   window.setAlwaysOnTop(true, "screen-saver")
   if (process.platform === "darwin") {
     window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
@@ -265,7 +267,13 @@ export function createIslandWindow(options: IslandWindowOptions) {
       screen.removeListener("display-removed", onDisplaysChanged)
       stopDrag()
       if (!window.isDestroyed()) window.destroy()
-      rmSync(dir, { recursive: true, force: true })
+      // Windows keeps the page and the preload locked for a moment after the
+    // window is gone, so the delete is retried before it gives up.
+    try {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    } catch {
+      // A locked temp directory is not worth failing the plugin over.
+    }
     },
   }
 }
