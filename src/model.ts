@@ -1,5 +1,5 @@
 import type { OpenCode } from "@opencode/client"
-import { PLAN_TOOL, failPlan, parseSteps } from "./plan.ts"
+import { PLAN_TOOL, failPlan, looksLikePlan, parseSteps, stopPlan } from "./plan.ts"
 import type {
   IslandState,
   PermissionDecision,
@@ -24,6 +24,7 @@ const WATCHED = [
   "session.execution.started",
   "session.execution.succeeded",
   "session.execution.failed",
+  "session.execution.interrupted",
   "session.tool.input.started",
   "session.tool.success",
   "session.tool.failed",
@@ -71,6 +72,10 @@ type Watched =
         | "session.execution.succeeded"
         | "session.execution.failed"
       data: { sessionID: string }
+    }
+  | {
+      type: "session.execution.interrupted"
+      data: { sessionID: string; reason: string }
     }
   | {
       type: "session.tool.input.started"
@@ -205,6 +210,15 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
     return "idle"
   }
 
+  /**
+   * The tool the row shows. The plan tool is bookkeeping, so it is never the
+   * one on the row.
+   */
+  function runningTool(entry: Entry): string | undefined {
+    for (const name of entry.tools.values()) if (name !== PLAN_TOOL) return name
+    return undefined
+  }
+
   const state = (): IslandState => {
     const now = Date.now()
     const visible: SessionView[] = []
@@ -326,12 +340,26 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
             touch(event.data.sessionID, { status: "idle", tool: undefined })
             break
           }
+          case "session.execution.interrupted": {
+            const entry = sessions.get(event.data.sessionID)
+            if (entry) {
+              entry.reasoning = false
+              entry.writing = false
+              // The run was stopped, so the step is not in hand any more. It
+              // did not fail, so it does not go red.
+              touch(event.data.sessionID, { plan: stopPlan(entry.plan) })
+            }
+            touch(event.data.sessionID, { status: "idle", tool: undefined })
+            break
+          }
           case "session.execution.started": {
             touch(event.data.sessionID, { status: "busy" })
             break
           }
           case "session.tool.input.started": {
             const data = event.data
+            // Every tool is tracked by name, so the plan call can be told
+            // apart from another tool's call.
             ensure(data.sessionID).tools.set(data.id, data.name)
             // The plan tool is bookkeeping, not work, so it is not the tool
             // the island shows on the row.
@@ -346,8 +374,7 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
             const entry = sessions.get(data.sessionID)
             if (!entry) break
             entry.tools.delete(data.id)
-            const next = entry.tools.values().next()
-            entry.tool = next.done ? undefined : next.value
+            entry.tool = runningTool(entry)
             break
           }
           case "session.tool.called": {
@@ -356,9 +383,12 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
             // The event carries no tool name, so the call is known by its
             // shape, and by the name when the model has it.
             const name = entry?.tools.get(data.id)
-            if (name && name !== PLAN_TOOL) break
-            const plan = parseSteps(data.input)
-            if (plan.length) touch(data.sessionID, { plan })
+            const steps = (data.input as { steps?: unknown } | null | undefined)?.steps
+            if (!Array.isArray(steps)) break
+            if (name ? name !== PLAN_TOOL : !looksLikePlan(data.input)) break
+            // An empty plan is the agent saying there are no steps, so the
+            // island stops showing the old ones.
+            touch(data.sessionID, { plan: parseSteps(data.input) })
             break
           }
           case "session.agent.selected": {

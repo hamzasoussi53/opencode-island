@@ -109,9 +109,10 @@ becomes `waiting`, so a step is never lost.
   list of steps, each with a title and a state. When the name is known, from
   the tool call the model already tracks, it has to be the island's tool.
 - When the session's execution fails, the step that was in hand becomes
-  `failed`: that is the red dot. An interrupted run does not, because the
-  user stopped it, and a tool that failed does not, because the agent may
-  recover from it. The red stays until the agent writes a new plan.
+  `failed`: that is the red dot. A tool that failed does not, because the
+  agent may recover from it. The red stays until the agent writes a new plan.
+- When the run was interrupted, the user stopped it, so the step in hand goes
+  back to waiting: it is not in hand any more, and it did not fail.
 - The plan is not cleared between turns: it is the agent's current work, and
   the rule asks for a new plan on every prompt anyway.
 

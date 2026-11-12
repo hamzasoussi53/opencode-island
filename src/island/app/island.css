@@ -128,13 +128,13 @@
 /* The dot of the step in hand pulses, so it reads as alive without flashing. */
 @keyframes step-pulse {
   0% {
-    box-shadow: 0 0 0 0 rgb(255 159 10 / 0.55);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--warning) 55%, transparent);
   }
   70% {
-    box-shadow: 0 0 0 5px rgb(255 159 10 / 0);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--warning) 0%, transparent);
   }
   100% {
-    box-shadow: 0 0 0 0 rgb(255 159 10 / 0);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--warning) 0%, transparent);
   }
 }
 

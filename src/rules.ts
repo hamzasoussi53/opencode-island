@@ -1,6 +1,6 @@
-import { appendFileSync, existsSync, readFileSync } from "node:fs"
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import { PLAN_TOOL } from "./plan.ts"
 
 /** The marker that says the block is the island's, so it can be found again. */
@@ -35,10 +35,15 @@ export function planRule(): string {
 export function installPlanRule(file = agentsFile()): boolean {
   try {
     if (existsSync(file) && readFileSync(file, "utf8").includes(MARK)) return false
+    // The directory may not be there yet on a fresh machine, and a rule that
+    // cannot be written is a rule no agent will ever follow.
+    mkdirSync(dirname(file), { recursive: true })
     appendFileSync(file, `\n${planRule()}`, "utf8")
     return true
-  } catch {
-    // A machine that will not let the file be written still gets an island.
+  } catch (error) {
+    // A machine that will not let the file be written still gets an island,
+    // but the rule is missing, so it is said out loud.
+    console.error("island: the plan rule could not be written", error)
     return false
   }
 }

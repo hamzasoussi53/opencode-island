@@ -641,7 +641,9 @@ function Row({
           {session.tool ? <span className={cn("ml-1.5", muted)}>{session.tool}</span> : null}
         </div>
         {session.plan?.length ? (
-          <div className="mt-0.5 flex items-center gap-1.5">
+          // A long plan wraps onto a second line rather than running over the
+          // time on the right.
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
             {session.plan.map((step) => (
               <StepMark key={step.n} step={step} />
             ))}

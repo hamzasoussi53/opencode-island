@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { createModel, keepWords, lastWords } from "../src/model.ts"
-import { failPlan, parseSteps, planWindow } from "../src/plan.ts"
+import { failPlan, looksLikePlan, parseSteps, planWindow, stopPlan } from "../src/plan.ts"
 import { installPlanRule, planRule } from "../src/rules.ts"
 import { islandShouldExist } from "../src/lifecycle.ts"
 import { barOrbState, orbState } from "../src/orb.ts"
@@ -94,6 +94,32 @@ assert.deepEqual(
 assert.deepEqual(failPlan(undefined), undefined)
 assert.deepEqual(failPlan([]), [])
 
+// A run that was stopped is not a failure, so the step waits again.
+assert.deepEqual(
+  stopPlan([
+    { n: 1, title: "Read it", state: "done" },
+    { n: 2, title: "Write it", state: "working" },
+    { n: 3, title: "Ship it", state: "waiting" },
+  ]),
+  [
+    { n: 1, title: "Read it", state: "done" },
+    { n: 2, title: "Write it", state: "waiting" },
+    { n: 3, title: "Ship it", state: "waiting" },
+  ],
+)
+assert.deepEqual(stopPlan(undefined), undefined)
+assert.deepEqual(stopPlan([]), [])
+
+// Another tool's call is not the island's plan, whatever it is shaped like.
+assert.equal(looksLikePlan({ steps: [{ title: "Read it", state: "waiting" }] }), true)
+assert.equal(looksLikePlan({ steps: [{ title: "Read it" }] }), false)
+assert.equal(looksLikePlan({ steps: [{ state: "waiting" }] }), false)
+assert.equal(looksLikePlan({ steps: ["read it"] }), false)
+assert.equal(looksLikePlan({ steps: [] }), false)
+assert.equal(looksLikePlan({ steps: "not a list" }), false)
+assert.equal(looksLikePlan({}), false)
+assert.equal(looksLikePlan(undefined), false)
+
 // The bar shows the steps around the one in hand, in order.
 const steps = (...states: PlanState[]) =>
   states.map((state, index) => ({ n: index + 1, title: `Step ${index + 1}`, state }))
@@ -116,53 +142,154 @@ assert.ok(after.includes(planRule()))
 assert.equal(installPlanRule(file), false)
 assert.equal(readFileSync(file, "utf8"), after)
 
-// The plan reaches the island from the tool call, which carries no name.
-const stream = [
-  {
-    type: "session.created",
-    created: Date.now(),
-    data: { sessionID: "s1", title: "Work", agent: "build", location: { directory: "/tmp" } },
-  },
-  { type: "session.tool.input.started", data: { sessionID: "s1", id: "t1", name: "island_plan" } },
-  {
-    type: "session.tool.called",
-    data: {
-      sessionID: "s1",
-      id: "t1",
-      input: {
-        steps: [
-          { title: "Read it", state: "done" },
-          { title: "Write it", state: "working" },
-        ],
-      },
-    },
-  },
-]
+// The rule goes in even when the directory is not there yet, which is a
+// fresh machine.
+const fresh = join(mkdtempSync(join(tmpdir(), "island-fresh-")), "opencode", "AGENTS.md")
+assert.equal(installPlanRule(fresh), true)
+assert.ok(readFileSync(fresh, "utf8").includes(planRule()))
 
-const fake = {
-  session: { list: async () => ({ data: [] }) },
-  permission: { request: { list: async () => ({ data: [] }) } },
-  event: {
-    subscribe: () => ({
-      async *[Symbol.asyncIterator]() {
-        for (const event of stream) yield event
-      },
-    }),
-  },
+// The plan reaches the island from the tool call, which carries no name.
+const created = {
+  type: "session.created",
+  created: Date.now(),
+  data: { sessionID: "s1", title: "Work", agent: "build", location: { directory: "/tmp" } },
 }
 
-let seen: IslandState | undefined
-const controller = new AbortController()
-createModel(fake as never, (state) => {
-  seen = state
-}).start(controller.signal)
-await new Promise((resolve) => setTimeout(resolve, 50))
-controller.abort()
-assert.ok(seen, "the model never published a state")
-assert.deepEqual(seen.sessions[0]?.plan, [
+/** Runs the model over a stream of events and hands back what it published. */
+async function run(events: unknown[]): Promise<IslandState> {
+  const fake = {
+    session: { list: async () => ({ data: [] }) },
+    permission: { request: { list: async () => ({ data: [] }) } },
+    event: {
+      subscribe: () => ({
+        async *[Symbol.asyncIterator]() {
+          for (const event of events) yield event
+        },
+      }),
+    },
+  }
+  let seen: IslandState | undefined
+  const controller = new AbortController()
+  createModel(fake as never, (state) => {
+    seen = state
+  }).start(controller.signal)
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  controller.abort()
+  assert.ok(seen, "the model never published a state")
+  return seen
+}
+
+const planCall = (id: string, input: unknown) => ({
+  type: "session.tool.called",
+  data: { sessionID: "s1", id, input },
+})
+
+const started = (id: string, name: string) => ({
+  type: "session.tool.input.started",
+  data: { sessionID: "s1", id, name },
+})
+
+const state = await run([
+  created,
+  started("t1", "island_plan"),
+  planCall("t1", {
+    steps: [
+      { title: "Read it", state: "done" },
+      { title: "Write it", state: "working" },
+    ],
+  }),
+])
+
+assert.deepEqual(state.sessions[0]?.plan, [
   { n: 1, title: "Read it", state: "done" },
   { n: 2, title: "Write it", state: "working" },
 ])
+
+// Another tool's call never takes the island's plan over, even when the
+// model never saw its name.
+const foreign = await run([
+  created,
+  started("t2", "some_other_tool"),
+  planCall("t2", { steps: [{ title: "Not ours", state: "working" }] }),
+])
+assert.equal(foreign.sessions[0]?.plan, undefined)
+
+// A run that fails takes the step in hand with it, and only that step.
+const failed = await run([
+  created,
+  started("t3", "island_plan"),
+  planCall("t3", {
+    steps: [
+      { title: "Read it", state: "done" },
+      { title: "Write it", state: "working" },
+      { title: "Ship it", state: "waiting" },
+    ],
+  }),
+  { type: "session.execution.failed", data: { sessionID: "s1" } },
+])
+assert.deepEqual(failed.sessions[0]?.plan, [
+  { n: 1, title: "Read it", state: "done" },
+  { n: 2, title: "Write it", state: "failed" },
+  { n: 3, title: "Ship it", state: "waiting" },
+])
+
+// A run the user stopped is not a failure, so nothing goes red.
+const interrupted = await run([
+  created,
+  started("t4", "island_plan"),
+  planCall("t4", {
+    steps: [
+      { title: "Read it", state: "done" },
+      { title: "Write it", state: "working" },
+    ],
+  }),
+  { type: "session.execution.interrupted", data: { sessionID: "s1", reason: "user" } },
+])
+assert.deepEqual(interrupted.sessions[0]?.plan, [
+  { n: 1, title: "Read it", state: "done" },
+  { n: 2, title: "Write it", state: "waiting" },
+])
+
+// A tool that failed is not the step failing, so the agent can recover.
+const toolFailed = await run([
+  created,
+  started("t5", "island_plan"),
+  planCall("t5", {
+    steps: [
+      { title: "Read it", state: "done" },
+      { title: "Write it", state: "working" },
+    ],
+  }),
+  { type: "session.tool.failed", data: { sessionID: "s1", id: "t5" } },
+])
+assert.deepEqual(toolFailed.sessions[0]?.plan, [
+  { n: 1, title: "Read it", state: "done" },
+  { n: 2, title: "Write it", state: "working" },
+])
+
+// The plan tool is bookkeeping, so it is never the tool the row shows.
+const withTool = await run([
+  created,
+  started("t6", "shell"),
+  started("t7", "island_plan"),
+  { type: "session.tool.success", data: { sessionID: "s1", id: "t6" } },
+])
+assert.equal(withTool.sessions[0]?.tool, undefined)
+
+// An empty plan retires the old one.
+const retired = await run([
+  created,
+  started("t8", "island_plan"),
+  planCall("t8", {
+    steps: [
+      { title: "Read it", state: "done" },
+      { title: "Write it", state: "working" },
+    ],
+  }),
+  started("t9", "island_plan"),
+  planCall("t9", { steps: [] }),
+])
+assert.deepEqual(retired.sessions[0]?.plan, [])
 
 // The island must not take the app's taskbar button with it, or there is
 // nothing to right-click to close OpenCode. It is a window option, so the

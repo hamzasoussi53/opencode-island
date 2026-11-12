@@ -14,8 +14,10 @@ import { installPlanRule } from "./rules.ts"
  */
 export default Plugin.define({
   id: "opencode-island",
-  setup(ctx) {
-    ctx.tool.transform((tools) => {
+  // The tool is registered before the plugin is done, so a failure to add it
+  // is a failure of the plugin, not a silence.
+  async setup(ctx) {
+    await ctx.tool.transform((tools) => {
       tools.add({
         name: PLAN_TOOL,
         description:

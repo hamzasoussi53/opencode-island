@@ -1,4 +1,4 @@
-import type { PlanStep } from "./state"
+import type { PlanState, PlanStep } from "./state"
 
 /** The tool the agent records its plan with. */
 export const PLAN_TOOL = "island_plan"
@@ -48,14 +48,41 @@ export function parseSteps(input: unknown): PlanStep[] {
 }
 
 /**
+ * Whether a tool call looks like a plan: a list of steps, each with a title
+ * and a state. A call the island cannot name is only a plan when it looks
+ * like one, so another tool's steps never take the island's plan over.
+ */
+export function looksLikePlan(input: unknown): boolean {
+  const steps = (input as { steps?: unknown } | null | undefined)?.steps
+  if (!Array.isArray(steps) || !steps.length) return false
+  return steps.every((step) => {
+    const item = (step ?? {}) as { title?: unknown; state?: unknown }
+    return typeof item.title === "string" && typeof item.state === "string"
+  })
+}
+
+/** The step in hand, and the state it takes. */
+function withInHand(plan: PlanStep[] | undefined, state: PlanState): PlanStep[] | undefined {
+  if (!plan?.length) return plan
+  const inHand = plan.findIndex((step) => step.state === "working")
+  if (inHand === -1) return plan
+  return plan.map((step, index) => (index === inHand ? { ...step, state } : step))
+}
+
+/**
  * The step the agent was on is the one that failed. A plan with nothing in
  * hand is left as it is.
  */
 export function failPlan(plan: PlanStep[] | undefined): PlanStep[] | undefined {
-  if (!plan?.length) return plan
-  const inHand = plan.findIndex((step) => step.state === "working")
-  if (inHand === -1) return plan
-  return plan.map((step, index) => (index === inHand ? { ...step, state: "failed" } : step))
+  return withInHand(plan, "failed")
+}
+
+/**
+ * The step the agent was on is not in hand any more: the run was stopped, so
+ * the step waits again. It did not fail, so it does not go red.
+ */
+export function stopPlan(plan: PlanStep[] | undefined): PlanStep[] | undefined {
+  return withInHand(plan, "waiting")
 }
 
 /**
