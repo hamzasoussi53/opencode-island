@@ -1,12 +1,13 @@
 {
   "name": "opencode-island",
   "version": "0.3.0",
-  "description": "A macOS Dynamic Island for OpenCode: live status of every session and agent on your machine, plus permission prompts you can answer without leaving your work.",
+  "description": "A macOS and Windows Dynamic Island for OpenCode: live status of every session and agent on your machine, plus permission prompts you can answer without leaving your work.",
   "keywords": [
     "opencode",
     "opencode-plugin",
     "dynamic-island",
     "macos",
+    "windows",
     "electron",
     "monitoring",
     "agents",

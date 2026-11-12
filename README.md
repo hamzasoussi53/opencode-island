@@ -1,6 +1,6 @@
 # opencode-island
 
-A macOS **Dynamic Island** for [OpenCode](https://opencode.ai).
+A **Dynamic Island** for [OpenCode](https://opencode.ai), on macOS and Windows.
 
 It floats on the right edge of your screen and tells you what every session and
 agent on your machine is doing — and lets you answer a permission prompt
@@ -26,11 +26,12 @@ without ever leaving the window you are working in.
 | | |
 |---|---|
 | macOS | 13 or newer |
+| Windows | 10 or newer (x64 or ARM64) |
 | OpenCode | 2.2.7 or newer (the GUI plugin API) |
 | Node | 20.19 or newer (only if you build from source) |
 
-The island is a macOS-only plugin: it uses an Electron window that floats
-above full-screen apps and every Space.
+The island is a plugin: it uses an Electron window that floats above other
+apps. On macOS it floats above full-screen apps and every Space too.
 
 ## Install
 
@@ -65,6 +66,9 @@ npm install --ignore-scripts
 npm run build
 ln -s "$PWD" ~/.config/opencode/plugins/opencode-island
 ```
+
+On Windows the symlink needs Developer Mode or an elevated shell.
+`opencode plugin add github:hamzasoussi53/opencode-island` avoids it.
 
 `--ignore-scripts` skips Electron's ~100 MB binary download. The plugin only
 needs Electron's type declarations to build; the desktop app supplies the
@@ -182,7 +186,11 @@ is React.
 
 ## Limits
 
-- macOS only, and the primary display only.
+- The primary display only.
+- On Windows the island belongs to the virtual desktop it was opened on:
+  Windows hides windows that belong to another desktop, and no Electron API
+  changes that. A game in exclusive full screen covers the island too; a
+  borderless full-screen window does not.
 - The island's spot along the edge, its appearance and its switches are
   remembered for the session only; they reset when the app restarts.
 - The island shows what the app's server knows. A session that never
