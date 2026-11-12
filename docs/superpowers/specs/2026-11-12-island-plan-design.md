@@ -41,28 +41,46 @@ for the work.
 bold step titles and a state on each. The plugin watches the project folder
 and parses the file.
 
-**2. The agent's own todo list.** The `todowrite` tool's arguments ride the
-event stream: `session.tool.called` carries the tool's input, which for that
-tool is `{ todos: [{ content, status, priority }] }`, with the statuses
-`pending`, `in_progress`, `completed` and `cancelled`. The plugin reads that
-and turns it into the island's steps.
+**2. The agent's own todo list.** The `todowrite` tool carries a plan with
+states (`pending`, `in_progress`, `completed`, `cancelled`).
 
-**3. Both.** The file as the record, the todo list as the live source.
+**3. A tool of the plugin's own.** The plugin's server half registers a tool,
+`island_plan`, that takes the steps. The rule tells the agent to call it.
 
-**Chosen: 2.**
+**Chosen: 3.**
 
-The todo list is already a plan, already structured, already per session, and
-it arrives the moment the agent writes it. A file would have to be parsed out
-of markdown that a model writes in slightly different words each time, and two
-agents working in one project would overwrite each other's file, so the
-per agent progress the open island is supposed to show could not be right.
+The todo list was the first choice and is the closest to what the agent
+already does, but it cannot be used: `todowrite` sits behind the `todo`
+feature flag, which is off in released builds, and the user's config does not
+turn it on. A rule that asks for a tool the agent does not have is inert.
 
-The cost of choosing 2 is that a plan only exists when the agent keeps a todo
-list. That is what the rule is for, and the rule becomes much smaller: it
-does not have to make the agent write a file, only keep its todos current
-while it works.
+A plan file needs no flag and no tool, but it has to be parsed out of
+markdown that a model writes in slightly different words each time, and two
+agents working in one project overwrite each other's file, so the per agent
+progress the open island is supposed to show could not be right.
+
+The plugin's own tool has none of those faults: the steps arrive as data,
+per session, the moment the agent writes them, and the tool is registered by
+the plugin, so nothing on the user's machine has to be switched on. The cost
+is one more piece of code, in the server half of the plugin, and a rule that
+asks for the tool by name.
 
 ## The change
+
+### `src/index.ts` (the server half)
+
+The plugin registers a tool:
+
+```ts
+{
+  name: "island_plan",
+  input: { steps: [{ title: string, state: "waiting" | "working" | "done" | "failed" }] },
+}
+```
+
+It records nothing: the call itself is the record, and the island reads it
+off the event stream. The tool asks for no permission of its own, and the
+default agent rules allow every tool that is not named, so it never prompts.
 
 ### `src/state.ts`
 
@@ -78,17 +96,24 @@ export interface PlanStep {
 ```
 
 `SessionView` gains `plan?: PlanStep[]`. The states are the island's own
-words, not the tool's: `completed` becomes `done`, `in_progress` becomes
-`working`, `pending` becomes `waiting`, `cancelled` becomes `failed`.
+words, and the tool uses them as they are. A state the island does not know
+becomes `waiting`, so a step is never lost.
 
 ### `src/model.ts`
 
 - Watch `session.tool.called` alongside the events already watched.
-- `parseTodos(input)` reads `{ todos }` out of a tool call and returns the
+- `parseSteps(input)` reads `{ steps }` out of a tool call and returns the
   steps. It is the one piece of parsing in the change, so it is exported and
   tested.
+- The event carries no tool name, so the call is recognised by its shape: a
+  list of steps, each with a title and a state. When the name is known, from
+  the tool call the model already tracks, it has to be the island's tool.
 - When the session's execution fails, the step that was in hand becomes
-  `failed`: that is the red dot.
+  `failed`: that is the red dot. An interrupted run does not, because the
+  user stopped it, and a tool that failed does not, because the agent may
+  recover from it. The red stays until the agent writes a new plan.
+- The plan is not cleared between turns: it is the agent's current work, and
+  the rule asks for a new plan on every prompt anyway.
 
 ### `src/rules.ts`
 
@@ -98,9 +123,12 @@ on Windows), reads it, and appends a marked block when the marker is not
 already there. It never rewrites what is already in the file, so running it
 on every start is the first time behaviour with nothing to undo.
 
-The block says: keep a todo list current with the `todowrite` tool while you
-work, one todo per step, `in_progress` on the step you are on, `completed`
-when it is done, and never left `pending` once you have moved past it.
+It runs in the server half's `setup()`, which is before any session reads the
+global instructions, so a rule added today reaches the next session.
+
+The block says: record the steps of the work with the `island_plan` tool, one
+per step, with a title and a state, and call it again whenever a step
+changes state.
 
 ### The island
 
@@ -120,15 +148,17 @@ marks with a count of how many are done.
 
 ## Risks
 
-- An agent that keeps no todo list shows no plan. The rule is the mitigation,
+- An agent that records no plan shows no plan. The rule is the mitigation,
   and it is a nudge, not a guarantee: the island degrades to what it shows
   today.
 - The rule changes how every agent on this machine works, not just the ones
   in this project. That is the point of a global rule, and it is one marked
   block that can be deleted.
 - `session.tool.called` carries the input of every tool call, not only the
-  todo writes. That is more traffic than the island used to take, on the
+  plan writes. That is more traffic than the island used to take, on the
   app's own socket, next to the text deltas it already receives.
+- The plan tool is registered by the server half of the plugin, so a session
+  on a server that does not load the plugin has no tool to call, and no plan.
 
 ## Out of scope, on purpose
 

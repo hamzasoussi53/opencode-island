@@ -4,7 +4,7 @@
 
 **Goal:** The island shows the agent's plan: the steps around the one in hand on the closed bar, and every agent's whole plan on its row in the open island, with a coloured dot per step.
 
-**Architecture:** The plan comes from the agent's own todo list, not from a file. The `todowrite` tool's arguments ride the event stream, so `src/model.ts` turns them into `PlanStep[]` on `SessionView` and the island draws them. The plugin appends one marked block to the global `AGENTS.md` so agents keep that list current. The window of steps is pure logic in `src/plan.ts`, shared by the island window and the test harness, the way `src/orb.ts` already is.
+**Architecture:** The plan comes from a tool of the plugin's own, `island_plan`, registered by the server half of the plugin. The agent calls it with the steps; the call rides the event stream as `session.tool.called`, and the model turns its input into `PlanStep[]` on `SessionView`. The plugin appends one marked block to the global `AGENTS.md` so agents call that tool. The pure plan logic lives in `src/plan.ts`, shared by the island window and the test harness, the way `src/orb.ts` already is.
 
 **Tech Stack:** Electron 45 (the OpenCode desktop app's own runtime), TypeScript, React 19, Tailwind v4, Vite. No new runtime dependency.
 
@@ -12,7 +12,8 @@
 
 ## Global Constraints
 
-- The plan is read from the agent's todo list. No plan file is written, read or parsed, and nothing is created on disk inside a user's project.
+- The plan is read from the island's own tool. No plan file is written, read or parsed, and nothing is created on disk inside a user's project.
+- The user's `opencode.json` is never touched. The plan tool needs no feature flag: `todowrite` is behind one that is off in released builds, so the plugin brings its own.
 - The rule goes into the global `AGENTS.md` only, inside one marked block, and the plugin never rewrites what is already in that file.
 - The island's existing behaviour is unchanged when there is no plan: the bar, the orbs, the words, the buttons and the drawer all work exactly as they do now.
 - The island window still has no access to the plugin SDK: only `IslandMessage` crosses, as JSON.
@@ -24,42 +25,42 @@
 
 Five conditions the spec implies that no automated test covers, most likely to bite first:
 
-1. **An agent that keeps no todo list.** The island must show what it shows today: no plan, no gaps, no errors. A missing plan is the common case, not a broken one.
-2. **A todo with a status the island does not know.** The step must still appear, as waiting. Steps must never vanish from the plan because of an unexpected value.
-3. **A session that fails on the step in hand.** That step goes red; every other step keeps its state.
+1. **An agent that records no plan.** The island must show what it shows today: no plan, no gaps, no errors. A missing plan is the common case, not a broken one.
+2. **A step the island does not recognise.** The step must still appear, as waiting. Steps must never vanish from the plan because of an unexpected value.
+3. **A session that fails on the step in hand.** That step goes red; every other step keeps its state. A run the user interrupted, or a tool that failed and was recovered from, must not go red.
 4. **A plan of more than three steps.** The bar shows three of them, in order, and the window slides as the agent advances.
 5. **A global `AGENTS.md` that already has content, or already has the rule.** The plugin must not clobber the file and must not add the rule twice.
 
 ---
 
-### Task 1: The steps, out of the agent's todo list
+### Task 1: The plan's shared logic
 
 **Files:**
+- Create: `src/plan.ts`
 - Modify: `src/state.ts` (the plan's types)
-- Modify: `src/model.ts` (watch the tool call, parse the todos)
 - Test: `scripts/check.ts`
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks.
-- Produces: `PlanState` and `PlanStep` in `src/state.ts`; `SessionView.plan?: PlanStep[]`; `parseTodos(input: unknown): PlanStep[]` and `failPlan(plan: PlanStep[] | undefined): PlanStep[] | undefined`, both exported from `src/model.ts`.
+- Produces: `PlanState` and `PlanStep` in `src/state.ts`; `SessionView.plan?: PlanStep[]`; `src/plan.ts` exporting `PLAN_TOOL` (the string `"island_plan"`), `planInput` (the tool's JSON schema), `parseSteps(input: unknown): PlanStep[]`, `failPlan(plan: PlanStep[] | undefined): PlanStep[] | undefined` and `planWindow(plan: PlanStep[]): PlanStep[]`.
 
 - [ ] **Step 1: Write the failing test**
 
-Add to `scripts/check.ts`, with `parseTodos` and `failPlan` imported from `../src/model.ts`, and `PlanState` imported as a type only:
+Add to `scripts/check.ts`, with `parseSteps`, `failPlan` and `planWindow` imported from `../src/plan.ts`, and `PlanState` imported as a type only:
 
 ```ts
 import type { PlanState } from "../src/state.ts"
 
-// The agent's plan comes out of its todo list, and only out of that.
-assert.deepEqual(parseTodos({ todos: [{ content: "Read it", status: "pending" }] }), [
+// The steps come out of the island's own tool, and only out of that.
+assert.deepEqual(parseSteps({ steps: [{ title: "Read it", state: "waiting" }] }), [
   { n: 1, title: "Read it", state: "waiting" },
 ])
 assert.deepEqual(
-  parseTodos({
-    todos: [
-      { content: "Read it", status: "completed" },
-      { content: "Write it", status: "in_progress" },
-      { content: "Ship it", status: "pending" },
+  parseSteps({
+    steps: [
+      { title: "Read it", state: "done" },
+      { title: "Write it", state: "working" },
+      { title: "Ship it", state: "waiting" },
     ],
   }),
   [
@@ -68,25 +69,18 @@ assert.deepEqual(
     { n: 3, title: "Ship it", state: "waiting" },
   ],
 )
-```
 
-And, for the cases that must not throw or lose a step:
-
-```ts
-assert.deepEqual(parseTodos({ todos: [{ content: "Dropped", status: "cancelled" }] }), [
-  { n: 1, title: "Dropped", state: "failed" },
-])
-assert.deepEqual(parseTodos({ todos: [{ content: "Odd", status: "something-new" }] }), [
+// A step is never lost, whatever the tool says.
+assert.deepEqual(parseSteps({ steps: [{ title: "Odd", state: "something-new" }] }), [
   { n: 1, title: "Odd", state: "waiting" },
 ])
-assert.deepEqual(parseTodos(undefined), [])
-assert.deepEqual(parseTodos({ todos: "not a list" }), [])
-assert.deepEqual(parseTodos({}), [])
-```
+assert.deepEqual(parseSteps(undefined), [])
+assert.deepEqual(parseSteps({ steps: "not a list" }), [])
+assert.deepEqual(parseSteps({}), [])
+assert.deepEqual(parseSteps({ steps: [{ title: 42, state: "done" }] }), [
+  { n: 1, title: "", state: "done" },
+])
 
-And for the step in hand when the agent fails on it:
-
-```ts
 // The step in hand is the one that failed.
 assert.deepEqual(
   failPlan([
@@ -102,12 +96,23 @@ assert.deepEqual(
 )
 assert.deepEqual(failPlan(undefined), undefined)
 assert.deepEqual(failPlan([]), [])
+
+// The bar shows the steps around the one in hand, in order.
+const steps = (...states: PlanState[]) =>
+  states.map((state, index) => ({ n: index + 1, title: `Step ${index + 1}`, state }))
+assert.deepEqual(
+  planWindow(steps("done", "done", "working", "waiting", "waiting")).map((step) => step.n),
+  [2, 3, 4],
+)
+assert.deepEqual(planWindow(steps("done", "done")).map((step) => step.n), [1, 2])
+assert.deepEqual(planWindow(steps("done", "done", "done", "waiting")).map((step) => step.n), [4])
+assert.deepEqual(planWindow([]), [])
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `npm run check`
-Expected: FAIL — the module does not export `parseTodos`.
+Expected: FAIL — the module `../src/plan.ts` does not exist.
 
 - [ ] **Step 3: Add the plan's types to `src/state.ts`**
 
@@ -127,51 +132,62 @@ export interface PlanStep {
 Add to `SessionView`, after `stream`:
 
 ```ts
-  /** The agent's plan, when it keeps one. */
+  /** The agent's plan, when it records one. */
   plan?: PlanStep[]
 ```
 
-- [ ] **Step 4: Implement `parseTodos` in `src/model.ts`**
-
-Add above `createModel`:
+- [ ] **Step 4: Create `src/plan.ts`**
 
 ```ts
-/** The tool that holds the agent's plan. */
-const PLAN_TOOL = "todowrite"
+import type { PlanStep } from "./state"
 
-/** The tool's words, and the island's. */
-const PLAN_STATES: Record<string, PlanState> = {
-  completed: "done",
-  in_progress: "working",
-  pending: "waiting",
-  cancelled: "failed",
+/** The tool the agent records its plan with. */
+export const PLAN_TOOL = "island_plan"
+
+/** How many steps the closed bar shows at once. */
+export const PLAN_WINDOW = 3
+
+/** The states a step can be in, and what an unknown one becomes. */
+const STATES = new Set(["waiting", "working", "done", "failed"])
+
+/** The tool's input: the steps, each with a title and a state. */
+export const planInput = {
+  type: "object",
+  properties: {
+    steps: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          state: { type: "string", enum: ["waiting", "working", "done", "failed"] },
+        },
+        required: ["title", "state"],
+      },
+    },
+  },
+  required: ["steps"],
 }
 
 /**
- * The steps of the agent's plan, out of a todo write. Anything that is not a
- * list of todos gives no plan at all.
+ * The steps of the plan, out of a call to the island's tool. Anything that
+ * is not a list of steps gives no plan at all, and a step is never lost: one
+ * the agent words in a way the island does not know is a step that waits.
  */
-export function parseTodos(input: unknown): PlanStep[] {
-  const todos = (input as { todos?: unknown } | null | undefined)?.todos
-  if (!Array.isArray(todos)) return []
-  return todos.map((todo, index) => {
-    const item = (todo ?? {}) as { content?: unknown; status?: unknown }
+export function parseSteps(input: unknown): PlanStep[] {
+  const steps = (input as { steps?: unknown } | null | undefined)?.steps
+  if (!Array.isArray(steps)) return []
+  return steps.map((step, index) => {
+    const item = (step ?? {}) as { title?: unknown; state?: unknown }
+    const state = String(item.state)
     return {
       n: index + 1,
-      title: typeof item.content === "string" ? item.content : "",
-      state: PLAN_STATES[String(item.status)] ?? "waiting",
+      title: typeof item.title === "string" ? item.title : "",
+      state: (STATES.has(state) ? state : "waiting") as PlanStep["state"],
     }
   })
 }
-```
 
-Add `PlanState` and `PlanStep` to the import from `./state` at the top of the file.
-
-- [ ] **Step 5: Implement `failPlan` in `src/model.ts`**
-
-Add next to `parseTodos`:
-
-```ts
 /**
  * The step the agent was on is the one that failed. A plan with nothing in
  * hand is left as it is.
@@ -182,71 +198,49 @@ export function failPlan(plan: PlanStep[] | undefined): PlanStep[] | undefined {
   if (inHand === -1) return plan
   return plan.map((step, index) => (index === inHand ? { ...step, state: "failed" } : step))
 }
+
+/**
+ * The steps the closed bar shows: the one in hand, the one before it and the
+ * one after it, in that order, so the numbers read upwards. With nothing in
+ * hand, the window starts at the first step that is not done.
+ */
+export function planWindow(plan: PlanStep[]): PlanStep[] {
+  if (plan.length <= PLAN_WINDOW) return plan
+  const inHand = plan.findIndex((step) => step.state === "working")
+  const first = inHand === -1 ? firstUnfinished(plan) : Math.max(0, inHand - 1)
+  return plan.slice(first, first + PLAN_WINDOW)
+}
+
+/** Where the window starts when no step is in hand. */
+function firstUnfinished(plan: PlanStep[]): number {
+  const index = plan.findIndex((step) => step.state !== "done")
+  return index === -1 ? plan.length - PLAN_WINDOW : index
+}
 ```
 
-- [ ] **Step 6: Watch the tool call**
-
-Add `"session.tool.called"` to the `WATCHED` array, and to the `Watched` union:
-
-```ts
-  | {
-      type: "session.tool.called"
-      data: { sessionID: string; id: string; name: string; input: { [x: string]: any } }
-    }
-```
-
-Add a case to the switch in `listen`:
-
-```ts
-          case "session.tool.called": {
-            const data = event.data
-            if (data.name !== PLAN_TOOL) break
-            const plan = parseTodos(data.input)
-            if (plan.length) touch(data.sessionID, { plan })
-            break
-          }
-```
-
-- [ ] **Step 7: Mark the step in hand as failed**
-
-In the switch in `listen`, split `session.execution.failed` out of the case it shares with `session.idle` and `session.execution.succeeded`, so that it can mark the step:
-
-```ts
-          case "session.execution.failed": {
-            const entry = sessions.get(event.data.sessionID)
-            if (entry) {
-              entry.reasoning = false
-              entry.writing = false
-              touch(event.data.sessionID, { plan: failPlan(entry.plan) })
-            }
-            touch(event.data.sessionID, { status: "idle", tool: undefined })
-            break
-          }
-```
-
-- [ ] **Step 8: Run the test to verify it passes**
+- [ ] **Step 5: Run the test to verify it passes**
 
 Run: `npm run check`
 Expected: PASS — prints `ok`.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/state.ts src/model.ts scripts/check.ts
-git commit -m "feat: read the agent's plan from its todo list"
+git add src/plan.ts src/state.ts scripts/check.ts
+git commit -m "feat: the plan's shared logic"
 ```
 
 ---
 
-### Task 2: The rule that keeps the list current
+### Task 2: The tool the agent records its plan with
 
 **Files:**
+- Modify: `src/index.ts` (the server half)
 - Create: `src/rules.ts`
-- Modify: `src/gui.tsx`
 - Test: `scripts/check.ts`
 
 **Interfaces:**
-- Consumes: nothing from earlier tasks.
+- Consumes: `PLAN_TOOL` and `planInput` from `src/plan.ts` (Task 1).
 - Produces: `src/rules.ts` exporting `agentsFile(): string`, `planRule(): string` and `installPlanRule(file?: string): boolean`. `installPlanRule` returns true when it wrote the rule, false when the rule was already there. It never changes anything else in the file.
 
 - [ ] **Step 1: Write the failing test**
@@ -278,7 +272,7 @@ import { appendFileSync, existsSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 
-/** The markers that say the block is the island's, so it can be found again. */
+/** The marker that says the block is the island's, so it can be found again. */
 const MARK = "opencode-island:plan"
 
 /** Where OpenCode keeps the global instructions. */
@@ -296,7 +290,7 @@ export function planRule(): string {
     `<!-- ${MARK} -->`,
     "## The island's plan",
     "",
-    "While you work, keep a todo list current with the `todowrite` tool: one todo per step of the plan, marked `in_progress` while you are on that step and `completed` the moment it is done, and never left `pending` once you have moved past it. The island reads that list and shows it on its closed bar, so it has to be right while you work, not written at the end.",
+    `When a task takes more than one step, record the steps with the \`${PLAN_TOOL}\` tool: one step per item, in the order you will do them, each with a \`title\` in your own words and a \`state\` of \`waiting\`, \`working\`, \`done\` or \`failed\`. Call it again whenever a step changes state, so the island on the screen always shows where you are.`,
     "",
     `<!-- /${MARK} -->`,
     "",
@@ -319,107 +313,169 @@ export function installPlanRule(file = agentsFile()): boolean {
 }
 ```
 
-- [ ] **Step 4: Call it when the plugin starts**
+Import `PLAN_TOOL` from `./plan` at the top of the file.
 
-In `src/gui.tsx`, import `installPlanRule` from `./rules`, and at the top of `main(ctx)`, before the island is created:
+- [ ] **Step 4: Register the tool and install the rule**
+
+In `src/index.ts`, replace the body of `setup()` with:
 
 ```ts
-    if (installPlanRule()) {
-      ctx.log.write("info", "island rule added to the global instructions")
-    }
+export default Plugin.define({
+  id: "opencode-island",
+  setup(ctx) {
+    // The tool the agent records its plan with. The call itself is the
+    // record: the island reads it off the event stream.
+    ctx.tool.transform((tools) => {
+      tools.add({
+        name: PLAN_TOOL,
+        description:
+          "Record the steps of the work you are doing, so the island can show them. Call it once with the whole plan, then again whenever a step changes state.",
+        input: planInput,
+        execute: async (input) => ({
+          output: input,
+          content: "The plan is on the island.",
+        }),
+      })
+    })
+    installPlanRule()
+  },
+})
 ```
+
+Import `PLAN_TOOL` and `planInput` from `./plan`, and `installPlanRule` from
+`./rules`.
 
 - [ ] **Step 5: Run the test to verify it passes**
 
 Run: `npm run check`
 Expected: PASS — prints `ok`.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Typecheck the server half**
+
+Run: `npm run typecheck`
+Expected: no error. If the tool's `execute` or `input` types do not line up
+with the plugin API, fix them here rather than loosening the types elsewhere.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add src/rules.ts src/gui.tsx scripts/check.ts
-git commit -m "feat: ask agents to keep their todo list current"
+git add src/index.ts src/rules.ts scripts/check.ts
+git commit -m "feat: the tool the agent records its plan with"
 ```
 
 ---
 
-### Task 3: The window of steps on the closed bar
+### Task 3: The plan, off the event stream
 
 **Files:**
-- Create: `src/plan.ts`
-- Modify: `src/island/app/tsconfig.json` (include the new file)
-- Modify: `src/island/app/components/island.tsx` (the mark, and the bar)
-- Modify: `src/island/app/island.css` (the pulsing dot)
+- Modify: `src/model.ts`
 - Test: `scripts/check.ts`
 
 **Interfaces:**
-- Consumes: `PlanStep` from `src/state.ts` (Task 1).
-- Produces: `src/plan.ts` exporting `planWindow(plan: PlanStep[]): PlanStep[]` and `PLAN_WINDOW = 3`. The window is the step in hand, the one before it and the one after it, in that order; with nothing in hand it starts at the first step that is not done.
+- Consumes: `PLAN_TOOL`, `parseSteps` and `failPlan` from `src/plan.ts` (Task 1).
+- Produces: `SessionView.plan` is filled from the tool calls.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Watch the tool call**
 
-Add to `scripts/check.ts`, importing `planWindow` from `../src/plan.ts` (`PlanState` is already imported as a type from Task 1):
-
-```ts
-// The bar shows the steps around the one in hand, in order.
-const steps = (...states: PlanState[]) =>
-  states.map((state, index) => ({ n: index + 1, title: `Step ${index + 1}`, state }))
-assert.deepEqual(
-  planWindow(steps("done", "done", "working", "waiting", "waiting")).map((step) => step.n),
-  [2, 3, 4],
-)
-assert.deepEqual(planWindow(steps("done", "done")).map((step) => step.n), [1, 2])
-assert.deepEqual(
-  planWindow(steps("done", "done", "done", "waiting")).map((step) => step.n),
-  [4],
-)
-assert.deepEqual(planWindow([]), [])
-```
-
-- [ ] **Step 2: Run the test to verify it fails**
-
-Run: `npm run check`
-Expected: FAIL — the module `../src/plan.ts` does not exist.
-
-- [ ] **Step 3: Create `src/plan.ts`**
+Add `"session.tool.called"` to the `WATCHED` array in `src/model.ts`, and to
+the `Watched` union:
 
 ```ts
-import type { PlanStep } from "./state"
-
-/** How many steps the closed bar shows at once. */
-export const PLAN_WINDOW = 3
-
-/**
- * The steps the closed bar shows: the one in hand, the one before it and the
- * one after it, in that order, so the numbers read upwards. With nothing in
- * hand, the window starts at the first step that is not done.
- */
-export function planWindow(plan: PlanStep[]): PlanStep[] {
-  if (plan.length <= PLAN_WINDOW) return plan
-  const inHand = plan.findIndex((step) => step.state === "working")
-  const first = inHand === -1 ? firstUnfinished(plan) : Math.max(0, inHand - 1)
-  return plan.slice(first, first + PLAN_WINDOW)
-}
-
-/** Where the window starts when no step is in hand. */
-function firstUnfinished(plan: PlanStep[]): number {
-  const index = plan.findIndex((step) => step.state !== "done")
-  return index === -1 ? plan.length - PLAN_WINDOW : index
-}
+  | {
+      type: "session.tool.called"
+      data: { sessionID: string; id: string; input: { [x: string]: any } }
+    }
 ```
 
-- [ ] **Step 4: Include the new file in the island's typescript project**
+- [ ] **Step 2: Read the plan from the call**
 
-In `src/island/app/tsconfig.json`, add `"../../plan.ts"` to the `include` array, next to `"../../orb.ts"`.
+Add a case to the switch in `listen`:
 
-- [ ] **Step 5: Run the test to verify it passes**
+```ts
+          case "session.tool.called": {
+            const data = event.data
+            const entry = sessions.get(data.sessionID)
+            // The event carries no tool name, so the call is known by its
+            // shape, and by the name when the model has it.
+            const name = entry?.tools.get(data.id)
+            if (name && name !== PLAN_TOOL) break
+            const plan = parseSteps(data.input)
+            if (plan.length) touch(data.sessionID, { plan })
+            break
+          }
+```
 
-Run: `npm run check`
-Expected: PASS — prints `ok`.
+- [ ] **Step 3: Keep the plan tool out of the row's tool name**
 
-- [ ] **Step 6: Draw one step**
+In the case for `session.tool.input.started`, the island shows the tool that
+is running. The plan tool is not work, it is bookkeeping, so it does not go
+there:
 
-In `src/island/app/components/island.tsx`, add the import of `planWindow` from `../../../plan`, and the import of `PlanStep` from `../../../state`.
+```ts
+          case "session.tool.input.started": {
+            const data = event.data
+            ensure(data.sessionID).tools.set(data.id, data.name)
+            if (data.name !== PLAN_TOOL) {
+              touch(data.sessionID, { status: "busy", tool: data.name })
+            }
+            break
+          }
+```
+
+- [ ] **Step 4: Mark the step in hand as failed**
+
+Split `session.execution.failed` out of the case it shares with
+`session.idle` and `session.execution.succeeded`, so that it can mark the
+step. An interrupted run is not a failure, and a tool that failed is not the
+step failing, so neither marks anything.
+
+```ts
+          case "session.execution.failed": {
+            const entry = sessions.get(event.data.sessionID)
+            if (entry) {
+              entry.reasoning = false
+              entry.writing = false
+              touch(event.data.sessionID, { plan: failPlan(entry.plan) })
+            }
+            touch(event.data.sessionID, { status: "idle", tool: undefined })
+            break
+          }
+```
+
+- [ ] **Step 5: Run the test**
+
+Run: `npm run check && npm run typecheck`
+Expected: `ok` and no type error.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/model.ts
+git commit -m "feat: read the plan off the event stream"
+```
+
+---
+
+### Task 4: The steps on the bar and in the open island
+
+**Files:**
+- Modify: `src/island/app/tsconfig.json` (include the new file)
+- Modify: `src/island/app/components/island.tsx` (the mark, the bar, the row)
+- Modify: `src/island/app/island.css` (the waiting colour, the pulse)
+
+**Interfaces:**
+- Consumes: `PlanStep` from `src/state.ts`, `planWindow` from `src/plan.ts`.
+- Produces: nothing new.
+
+- [ ] **Step 1: Include the new file in the island's typescript project**
+
+In `src/island/app/tsconfig.json`, add `"../../plan.ts"` to the `include`
+array, next to `"../../orb.ts"`.
+
+- [ ] **Step 2: Draw one step**
+
+In `src/island/app/components/island.tsx`, add the import of `planWindow`
+from `../../../plan`, and of `PlanStep` from `../../../state`.
 
 Add this component next to `OpenCodeMark`:
 
@@ -428,6 +484,7 @@ Add this component next to `OpenCodeMark`:
 function StepMark({ step, across }: { step: PlanStep; across?: boolean }) {
   return (
     <span
+      title={step.title}
       className={cn(
         "flex items-center gap-1 text-[10px] leading-none tabular-nums",
         across ? "flex-col-reverse" : "flex-row",
@@ -448,11 +505,15 @@ function StepMark({ step, across }: { step: PlanStep; across?: boolean }) {
 }
 ```
 
-The bar writes sideways, so a step's number and its dot sit side by side across the bar: `flex-col-reverse` in a vertical writing mode puts the number on the left and the dot on its right.
+The bar writes sideways, so a step's number and its dot sit side by side
+across the bar: `flex-col-reverse` in a vertical writing mode puts the number
+on the left and the dot on its right.
 
-- [ ] **Step 7: Add the waiting colour and the pulse to `src/island/app/island.css`**
+- [ ] **Step 3: Add the waiting colour and the pulse to `src/island/app/island.css`**
 
-In the `@theme inline` block, add `--color-waiting: var(--waiting);`. In `:root`, add `--waiting: #ffd60a;`. In `[data-theme="light"]`, add `--waiting: #b98900;`.
+In the `@theme inline` block, add `--color-waiting: var(--waiting);`. In
+`:root`, add `--waiting: #ffd60a;`. In `[data-theme="light"]`, add
+`--waiting: #b98900;`.
 
 Add at the end of the file:
 
@@ -481,9 +542,10 @@ Add at the end of the file:
 }
 ```
 
-- [ ] **Step 8: Show the window on the closed bar**
+- [ ] **Step 4: Show the window on the closed bar**
 
-In the closed branch of `src/island/app/components/island.tsx`, after the orb slot and before the words, add:
+In the closed branch of `src/island/app/components/island.tsx`, after the orb
+slot and before the words, add:
 
 ```tsx
           {active?.plan?.length ? (
@@ -495,37 +557,14 @@ In the closed branch of `src/island/app/components/island.tsx`, after the orb sl
           ) : null}
 ```
 
-`active` is the session the bar already shows the words of.
+`active` is the session the bar already shows the words of, so the plan and
+the words are of the same agent. The marks take length from the words, not
+width: the words are cut to fit, never the bar.
 
-- [ ] **Step 9: Build and look at the bar**
+- [ ] **Step 5: Show every agent's plan in the open island**
 
-Run: `npm run build`
-Expected: the island bundle is built with no error.
-
-Then run the Electron harness in `/tmp/etest/main16.js`, with the fake state's sessions carrying a `plan`, and check with `getBoundingClientRect` that the three marks are inside the bar's 36px width, in the order 2, 3, 4, and that the bar does not overflow.
-
-- [ ] **Step 10: Commit**
-
-```bash
-git add src/plan.ts src/island/app/tsconfig.json src/island/app/components/island.tsx src/island/app/island.css scripts/check.ts
-git commit -m "feat: show the steps in hand on the closed bar"
-```
-
----
-
-### Task 4: Every agent's plan in the open island
-
-**Files:**
-- Modify: `src/island/app/components/island.tsx` (the row)
-- Test: none automated; verified against the real window.
-
-**Interfaces:**
-- Consumes: `PlanStep` from `src/state.ts` (Task 1), `StepMark` from the same file (Task 3).
-- Produces: nothing new.
-
-- [ ] **Step 1: Draw the plan on the row**
-
-In the `Row` component of `src/island/app/components/island.tsx`, under the title line and above the streamed words, add:
+In the `Row` component of the same file, under the title line and above the
+streamed words, add:
 
 ```tsx
         {session.plan?.length ? (
@@ -540,18 +579,22 @@ In the `Row` component of `src/island/app/components/island.tsx`, under the titl
         ) : null}
 ```
 
-- [ ] **Step 2: Build and look at the island**
+- [ ] **Step 6: Build and look at the island**
 
 Run: `npm run build`
-Expected: no error.
+Expected: the island bundle is built with no error.
 
-Run the Electron harness with a fake state of two sessions, each with its own plan of different lengths, open the island, and check that each row shows its own marks and its own count.
+Run the Electron harness in `/tmp/etest/main16.js` with a fake state whose
+session carries a plan of five steps, two done, the third working, and check
+with `getBoundingClientRect` that the three marks are inside the bar's 36px
+width, in the order 2, 3, 4, that the bar does not overflow, and that the
+open island shows the same marks on the row.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add src/island/app/components/island.tsx
-git commit -m "feat: show every agent's plan in the open island"
+git add src/island/app/tsconfig.json src/island/app/components/island.tsx src/island/app/island.css
+git commit -m "feat: show the steps on the bar and in the open island"
 ```
 
 ---
@@ -560,7 +603,6 @@ git commit -m "feat: show every agent's plan in the open island"
 
 **Files:**
 - Modify: `README.md`
-- Modify: `docs/superpowers/specs/2026-11-12-island-plan-design.md` (mark it as built, if the repo does that for other specs)
 
 **Interfaces:**
 - Consumes: everything above.
@@ -568,7 +610,13 @@ git commit -m "feat: show every agent's plan in the open island"
 
 - [ ] **Step 1: Document the plan on the island**
 
-In `README.md`, in the section that describes the closed tab, add a paragraph saying that under the grip the island shows the steps of the agent's plan, each a number and a dot: green when the step is done, orange and pulsing on the step in hand, yellow for the ones waiting, red for the one that failed. Say that the plan is the agent's own todo list, and that the plugin adds one rule to the global `AGENTS.md` so agents keep that list current while they work.
+In `README.md`, in the section that describes the closed tab, add a paragraph
+saying that under the grip the island shows the steps of the agent's plan,
+each a number and a dot: green when the step is done, orange and pulsing on
+the step in hand, yellow for the ones waiting, red for the one that failed.
+Say that the plan is recorded by the agent itself with the plugin's own
+`island_plan` tool, and that the plugin adds one rule to the global
+`AGENTS.md` so agents record it as they work.
 
 - [ ] **Step 2: Run everything**
 
@@ -578,10 +626,13 @@ Expected: no type error, `ok` from the check, and a built island bundle.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add README.md docs/superpowers/specs/2026-11-12-island-plan-design.md
+git add README.md
 git commit -m "docs: the island's plan"
 ```
 
 - [ ] **Step 4: Ship**
 
-Bump the version in `package.json`, commit, push the branch and the tag, publish to npm, create the GitHub release with the notes on what the plan is and where it comes from, and publish the landing page with `sh scripts/pages.sh`.
+Bump the version in `package.json`, commit, push the branch and the tag,
+publish to npm, create the GitHub release with the notes on what the plan is
+and where it comes from, and publish the landing page with
+`sh scripts/pages.sh`.
