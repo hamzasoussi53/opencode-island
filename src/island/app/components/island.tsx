@@ -23,6 +23,9 @@ import { cn } from "@/lib/utils"
 
 const EMPTY: IslandMessage = { sessions: [], working: 0, waiting: 0, open: false }
 
+/** Where the length of the closed tab is kept, so it survives a restart. */
+const SHARE_KEY = "opencode-island:share"
+
 type Theme = "light" | "dark" | "system"
 
 /** The appearance button cycles through the three, one click each. */
@@ -120,6 +123,8 @@ export function Island() {
   /** The height the user asked for, as a share of the screen. Null until set. */
   const [share, setShare] = useState<number | null>(null)
   const [screen, setScreen] = useState({ width: 1920, height: 1200 })
+  /** The screen size turns the kept share into a length, so nothing is sized until it is in. */
+  const [ready, setReady] = useState(false)
 
   const shell = useRef<HTMLDivElement>(null)
   const handle = useRef<HTMLDivElement>(null)
@@ -136,7 +141,16 @@ export function Island() {
   useEffect(() => {
     window.island.onState(setState)
     window.island.ready()
-    void window.island.screen().then(setScreen)
+    void window.island
+      .screen()
+      .then((size) => {
+        setScreen(size)
+        // The length the user set last time, so the bar does not start over.
+        const saved = Number(localStorage.getItem(SHARE_KEY))
+        if (saved >= 10 && saved <= 90) setShare(saved)
+      })
+      .catch(() => undefined)
+      .finally(() => setReady(true))
   }, [])
 
   useEffect(() => {
@@ -158,7 +172,7 @@ export function Island() {
   // the screen wins over the content height, so the panel can be a set length.
   useLayoutEffect(() => {
     const element = shell.current
-    if (!element) return
+    if (!element || !ready) return
     const report = () => {
       // While the bar is resized the drag owns the height.
       if (resizing.current) return
@@ -176,7 +190,7 @@ export function Island() {
     const observer = new ResizeObserver(report)
     observer.observe(element)
     return () => observer.disconnect()
-  }, [share, open, screen])
+  }, [share, open, screen, ready])
 
   // Press and move on the closed tab to slide it along the edge.
   useEffect(() => {
@@ -214,7 +228,9 @@ export function Island() {
       }, 500)
       // The window knows the length the drag asked for; keep it.
       const next = Math.round((window.innerHeight / screen.height) * 100)
-      setShare(Math.min(90, Math.max(10, next)))
+      const clamped = Math.min(90, Math.max(10, next))
+      setShare(clamped)
+      localStorage.setItem(SHARE_KEY, String(clamped))
       window.island.resizeEnd()
     }
     document.addEventListener("mousemove", onMove)
@@ -460,6 +476,15 @@ export function Island() {
           >
             <DotsSixVertical size={14} weight="duotone" />
           </div>
+          {/* How many agents are working, as a number under the grip. */}
+          {working > 0 ? (
+            <span
+              key={working}
+              className="count-pop shrink-0 text-[13px] font-semibold tabular-nums"
+            >
+              {working}
+            </span>
+          ) : null}
           {/* The slot keeps its size, so the bar does not change length. */}
           <span className="flex size-5 shrink-0 items-center justify-center">
             {barOrb ? (

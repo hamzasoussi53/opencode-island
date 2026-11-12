@@ -95,13 +95,15 @@ The tab sits on the right edge, vertically centred. It shows one line:
 
 Next to the grip, a small orb shows what the busiest session is doing, and the
 words fill the tab without ever changing its length: the newest ones stay in
-sight and the oldest are cut off at the top.
+sight and the oldest are cut off at the top. Under the grip, a number counts
+the agents that are working, and pops when the count changes.
 
 The dotted grip at the **top** moves the tab: press and drag it up or down and
 it slides along the edge, staying where you leave it.
 
 The grip at the **bottom** changes how long the bar is: drag it and the bar
-grows or shrinks downwards, its top staying put.
+grows or shrinks downwards, its top staying put. The length you leave it at is
+kept, so the bar comes back the same size the next time you open OpenCode.
 
 Click anywhere else on the tab to open the island.
 
