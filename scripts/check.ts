@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { keepWords, lastWords } from "../src/model.ts"
 import { failPlan, parseSteps, planWindow } from "../src/plan.ts"
+import { installPlanRule, planRule } from "../src/rules.ts"
 import { islandShouldExist } from "../src/lifecycle.ts"
 import { barOrbState, orbState } from "../src/orb.ts"
 import type { PlanState } from "../src/state.ts"
@@ -101,6 +104,17 @@ assert.deepEqual(
 assert.deepEqual(planWindow(steps("done", "done")).map((step) => step.n), [1, 2])
 assert.deepEqual(planWindow(steps("done", "done", "done", "waiting")).map((step) => step.n), [4])
 assert.deepEqual(planWindow([]), [])
+
+// The rule goes in once, and never eats what was already in the file.
+const dir = mkdtempSync(join(tmpdir(), "island-rule-"))
+const file = join(dir, "AGENTS.md")
+writeFileSync(file, "# Global instructions\n\nBrowser work runs through browse.\n")
+assert.equal(installPlanRule(file), true)
+const after = readFileSync(file, "utf8")
+assert.ok(after.startsWith("# Global instructions\n\nBrowser work runs through browse.\n"))
+assert.ok(after.includes(planRule()))
+assert.equal(installPlanRule(file), false)
+assert.equal(readFileSync(file, "utf8"), after)
 
 // The island must not take the app's taskbar button with it, or there is
 // nothing to right-click to close OpenCode. It is a window option, so the

@@ -1,11 +1,31 @@
 import { Plugin } from "@opencode/plugin"
+import { PLAN_TOOL, planInput } from "./plan.ts"
+import { installPlanRule } from "./rules.ts"
 
 /**
- * The server part exists so the desktop app discovers the plugin and reads its
- * `./gui-experimental` bundle. Everything the island needs it reads from the
- * app's own server in the main process, so there is nothing to do here.
+ * The server half of the plugin.
+ *
+ * It gives the agent the one tool the island needs: the plan the agent is
+ * working through. The call itself is the record, and the island reads it
+ * off the event stream, so the tool keeps nothing.
+ *
+ * It also puts the rule that asks the agent to use it into the global
+ * instructions, once.
  */
 export default Plugin.define({
   id: "opencode-island",
-  setup() {},
+  setup(ctx) {
+    ctx.tool.transform((tools) => {
+      tools.add({
+        name: PLAN_TOOL,
+        description:
+          "Record the steps of the work you are doing, so the island can show them. Call it once with the whole plan, then again whenever a step changes state.",
+        input: planInput,
+        execute: async () => ({
+          content: "The plan is on the island.",
+        }),
+      })
+    })
+    installPlanRule()
+  },
 })
