@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
-import { failPlan, keepWords, lastWords, parseTodos } from "../src/model.ts"
+import { keepWords, lastWords } from "../src/model.ts"
+import { failPlan, parseSteps, planWindow } from "../src/plan.ts"
 import { islandShouldExist } from "../src/lifecycle.ts"
 import { barOrbState, orbState } from "../src/orb.ts"
 import type { PlanState } from "../src/state.ts"
@@ -44,16 +45,16 @@ assert.equal(barOrbState({ phase: "thinking" }, false), "breathing")
 assert.equal(barOrbState({ phase: "thinking" }, true), undefined)
 assert.equal(barOrbState(undefined, false), undefined)
 
-// The agent's plan comes out of its todo list, and only out of that.
-assert.deepEqual(parseTodos({ todos: [{ content: "Read it", status: "pending" }] }), [
+// The steps come out of the island's own tool, and only out of that.
+assert.deepEqual(parseSteps({ steps: [{ title: "Read it", state: "waiting" }] }), [
   { n: 1, title: "Read it", state: "waiting" },
 ])
 assert.deepEqual(
-  parseTodos({
-    todos: [
-      { content: "Read it", status: "completed" },
-      { content: "Write it", status: "in_progress" },
-      { content: "Ship it", status: "pending" },
+  parseSteps({
+    steps: [
+      { title: "Read it", state: "done" },
+      { title: "Write it", state: "working" },
+      { title: "Ship it", state: "waiting" },
     ],
   }),
   [
@@ -64,15 +65,15 @@ assert.deepEqual(
 )
 
 // A step is never lost, whatever the tool says.
-assert.deepEqual(parseTodos({ todos: [{ content: "Dropped", status: "cancelled" }] }), [
-  { n: 1, title: "Dropped", state: "failed" },
-])
-assert.deepEqual(parseTodos({ todos: [{ content: "Odd", status: "something-new" }] }), [
+assert.deepEqual(parseSteps({ steps: [{ title: "Odd", state: "something-new" }] }), [
   { n: 1, title: "Odd", state: "waiting" },
 ])
-assert.deepEqual(parseTodos(undefined), [])
-assert.deepEqual(parseTodos({ todos: "not a list" }), [])
-assert.deepEqual(parseTodos({}), [])
+assert.deepEqual(parseSteps(undefined), [])
+assert.deepEqual(parseSteps({ steps: "not a list" }), [])
+assert.deepEqual(parseSteps({}), [])
+assert.deepEqual(parseSteps({ steps: [{ title: 42, state: "done" }] }), [
+  { n: 1, title: "", state: "done" },
+])
 
 // The step in hand is the one that failed.
 assert.deepEqual(
@@ -89,6 +90,17 @@ assert.deepEqual(
 )
 assert.deepEqual(failPlan(undefined), undefined)
 assert.deepEqual(failPlan([]), [])
+
+// The bar shows the steps around the one in hand, in order.
+const steps = (...states: PlanState[]) =>
+  states.map((state, index) => ({ n: index + 1, title: `Step ${index + 1}`, state }))
+assert.deepEqual(
+  planWindow(steps("done", "done", "working", "waiting", "waiting")).map((step) => step.n),
+  [2, 3, 4],
+)
+assert.deepEqual(planWindow(steps("done", "done")).map((step) => step.n), [1, 2])
+assert.deepEqual(planWindow(steps("done", "done", "done", "waiting")).map((step) => step.n), [4])
+assert.deepEqual(planWindow([]), [])
 
 // The island must not take the app's taskbar button with it, or there is
 // nothing to right-click to close OpenCode. It is a window option, so the
