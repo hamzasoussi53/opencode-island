@@ -51,4 +51,8 @@ assert.match(
 )
 assert.equal(windowSource.match(/window\.setVisibleOnAllWorkspaces\(/g)?.length, 1)
 
+// The island must not take the app's taskbar button with it, or there is
+// nothing to right-click to close OpenCode.
+assert.match(windowSource, /skipTaskbar: false/)
+
 console.log("ok")
