@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>opencode-island — a Dynamic Island for OpenCode</title>
+    <meta
+      name="description"
+      content="A macOS Dynamic Island for OpenCode: it floats on the right edge of your screen and shows every session and agent on your machine, what it is doing, and the permission prompts you can answer in place."
+    />
+    <link rel="icon" href="img/favicon.png" type="image/png" />
+    <link rel="stylesheet" href="site.css" />
+    <link rel="preconnect" href="https://api.fontshare.com" />
+    <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin />
+    <link
+      href="https://api.fontshare.com/v2/css?f[]=clash-grotesk@400,500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="canonical" href="https://hamzasoussi53.github.io/opencode-island/" />
+    <meta property="og:title" content="opencode-island" />
+    <meta
+      property="og:description"
+      content="Every session, on the screen edge."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="img/logo.png" />
+  </head>
+  <body>
+    <div class="mesh" aria-hidden="true">
+      <span class="shape shape-a"></span>
+      <span class="shape shape-b"></span>
+      <span class="shape shape-c"></span>
+      <span class="shape shape-d"></span>
+    </div>
+
+    <header class="top wrap">
+      <a class="mark" href="https://github.com/hamzasoussi53/opencode-island">
+        <img src="img/favicon.png" width="34" height="21" alt="" />
+        <span>opencode-island</span>
+      </a>
+      <a
+        class="star"
+        href="https://github.com/hamzasoussi53/opencode-island"
+        target="_blank"
+        rel="noreferrer"
+      >
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+          <path
+            fill="currentColor"
+            d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"
+          />
+        </svg>
+        <span>Star on GitHub</span>
+        <span class="star-count" data-stars></span>
+      </a>
+    </header>
+
+    <main>
+      <section class="hero wrap">
+        <div class="hero-text">
+          <h1 data-reveal>Every session, on the screen edge.</h1>
+          <p class="lead" data-reveal>
+            A macOS Dynamic Island for OpenCode. It floats on the right edge of your Mac and
+            tells you what every session and agent on your machine is doing — and answers the
+            permission prompts you would otherwise have to go and find.
+          </p>
+          <div class="actions" data-reveal>
+            <a class="button" href="https://github.com/hamzasoussi53/opencode-island#install"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v7.5m0 0 3-3m-3 3-3-3"/><path d="M2.5 11.5v1a1.5 1.5 0 0 0 1.5 1.5h8a1.5 1.5 0 0 0 1.5-1.5v-1"/></svg><span>Install it</span></a>
+            <a class="arrow-link" href="https://github.com/hamzasoussi53/opencode-island#use"><span>Read the README</span><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a>
+          </div>
+        </div>
+
+        <figure class="screen" data-ui data-reveal>
+          <div class="screen-frame">
+            <iframe
+              src="island/index.html?demo=open"
+              title="The opencode-island plugin listing the running sessions on a Mac screen edge"
+              loading="eager"
+            ></iframe>
+          </div>
+          <figcaption>The island itself, on the edge of a screen. Click it to close it back to the tab.</figcaption>
+        </figure>
+      </section>
+
+      <section class="section wrap">
+        <h2 data-reveal>What it shows</h2>
+        <div class="cells">
+          <article class="cell" data-reveal>
+            <div class="cell-text">
+              <h3><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="5.2" stroke-dasharray="0.1 2.4" stroke-linecap="round"/><circle cx="8" cy="2.8" r="1.1" fill="currentColor" stroke="none"/></svg><span>What it is doing</span></h3>
+              <p>
+                A live session carries an orb that names its activity: thinking, writing,
+                searching, running code. A shell command and a web search stop looking the same.
+              </p>
+            </div>
+            <img
+              class="fragment data-reveal"
+              src="img/bar.png"
+              width="36"
+              height="240"
+              alt="The closed island: a narrow black tab on the screen edge with a dotted orb and the agent's words running down its spine."
+              loading="lazy"
+            />
+          </article>
+
+          <article class="cell blue" data-reveal>
+            <div class="cell-text">
+              <h3><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M6 4h8M6 8h8M6 12h8M2.5 4h.01M2.5 8h.01M2.5 12h.01"/></svg><span>Every session, nested</span></h3>
+              <p>
+                Only the sessions running right now are listed, with the subagents indented
+                under the session that spawned them. Idle ones stay out of the way.
+              </p>
+            </div>
+            <img
+              class="fragment data-reveal wide-fragment"
+              src="img/drawer.png"
+              width="420"
+              height="248"
+              alt="The open island listing four running sessions, one of them a subagent indented under its parent."
+              loading="lazy"
+            />
+          </article>
+
+          <article class="cell amber" data-reveal>
+            <div class="cell-text">
+              <h3><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.6 13.2 3.6v4.1c0 3.2-2.2 5.6-5.2 6.7-3-1.1-5.2-3.5-5.2-6.7V3.6z"/><path d="M5.8 8.1 7.4 9.7l3-3.4"/></svg><span>Approvals, answered in place</span></h3>
+              <p>
+                When an agent asks for permission the island turns orange, opens itself and
+                waits. You answer without leaving the window you are working in.
+              </p>
+            </div>
+            <img
+              class="fragment data-reveal wide-fragment"
+              src="img/approval.png"
+              width="420"
+              height="345"
+              alt="The island in orange, waiting for a permission to run a migration, with the three answer buttons."
+              loading="lazy"
+            />
+          </article>
+
+          <article class="cell" data-reveal>
+            <div class="cell-text">
+              <h3><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="6.2"/><path d="M8 1.8a6.2 6.2 0 0 0 0 12.4z" fill="currentColor" stroke="none"/></svg><span>It looks like the rest of your Mac</span></h3>
+              <p>
+                Light, dark or system. It can also take clicks away entirely, so it never gets
+                in the way of what you are doing.
+              </p>
+            </div>
+            <img
+              class="fragment data-reveal wide-fragment"
+              src="img/drawer-light.png"
+              width="420"
+              height="248"
+              alt="The same island in its light appearance, with the appearance and click-through controls at the bottom."
+              loading="lazy"
+            />
+          </article>
+        </div>
+      </section>
+
+      <section class="section wrap">
+        <h2 data-reveal>How it works</h2>
+        <div class="steps">
+          <div class="step" data-reveal>
+            <div class="call">
+              <p class="step-lead">First, install it.</p>
+              <pre class="code"><code id="install">opencode plugin add opencode-island</code></pre>
+              <button class="copy" data-copy="install"><svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 3.5h-7a1 1 0 0 0-1 1v7"/></svg><span>Copy</span></button>
+            </div>
+            <div class="response">
+              <p class="response-note">
+                It appears on the right edge of your screen and stays out of the way until
+                something happens.
+              </p>
+              <img
+                class="fragment"
+                src="img/bar.png"
+                width="36"
+                height="240"
+                alt="The closed island on the screen edge."
+                loading="lazy"
+              />
+            </div>
+          </div>
+
+          <div class="step" data-reveal>
+            <div class="call">
+              <p class="step-lead">Then run your agent as usual.</p>
+              <pre class="code"><code id="run">opencode</code></pre>
+              <button class="copy" data-copy="run"><svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 3.5h-7a1 1 0 0 0-1 1v7"/></svg><span>Copy</span></button>
+            </div>
+            <div class="response">
+              <p class="response-note">
+                Every session shows up on the edge, with the words the agent is saying and an
+                orb for what it is doing right now.
+              </p>
+              <img
+                class="fragment wide-fragment"
+                src="img/drawer.png"
+                width="420"
+                height="248"
+                alt="The island listing the running sessions."
+                loading="lazy"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="cta-band">
+        <div class="wrap cta">
+          <div class="cta-text">
+            <h2 data-reveal>Install it on your Mac.</h2>
+            <p class="lead" data-reveal>
+              It needs macOS 13 or newer and OpenCode 2.2.7 or newer. One command, then it
+              floats on the edge of your screen.
+            </p>
+          </div>
+          <div class="actions" data-reveal>
+            <a class="button" href="https://github.com/hamzasoussi53/opencode-island#install"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v7.5m0 0 3-3m-3 3-3-3"/><path d="M2.5 11.5v1a1.5 1.5 0 0 0 1.5 1.5h8a1.5 1.5 0 0 0 1.5-1.5v-1"/></svg><span>Install it</span></a>
+            <a class="arrow-link" href="https://www.npmjs.com/package/opencode-island"><span>On npm</span><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10M9 4l4 4-4 4"/></svg></a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="wrap">
+      <img class="foot-logo" src="img/logo.png" width="200" height="133" alt="OpenCode Island" />
+      <p class="foot-by">
+        Built by <a href="https://www.soussitech.com/">Soussitech</a>
+      </p>
+      <p class="foot-links">
+        <a href="https://github.com/hamzasoussi53/opencode-island"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg><span>GitHub</span></a>
+        <a href="https://www.npmjs.com/package/opencode-island"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M8 1.6 14.2 5v6L8 14.4 1.8 11V5z"/><path d="M1.8 5 8 8.4 14.2 5M8 8.4v6"/></svg><span>npm</span></a>
+        <a href="https://x.com/soussi_53"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="currentColor"><path d="M9.4 6.9 15.1 1h-1.4L8.8 6 4.6 1H1l6 8.4L1 15h1.4l5.2-5.6L11.9 15h3.6L9.4 6.9Z"/></svg><span>X</span></a>
+        <a href="https://www.soussitech.com/">Soussitech</a>
+        <span>MIT</span>
+      </p>
+    </footer>
+
+    <script src="site.js"></script>
+  </body>
+</html>
