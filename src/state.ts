@@ -12,6 +12,17 @@ export type SessionPhase = "idle" | "thinking" | "writing" | "working" | "waitin
 
 export type PermissionDecision = "once" | "always" | "reject"
 
+/** Where a step of the plan stands. */
+export type PlanState = "waiting" | "working" | "done" | "failed"
+
+export interface PlanStep {
+  /** The step's number, one based, as the agent numbered it. */
+  n: number
+  /** What the step is, in the agent's words. */
+  title: string
+  state: PlanState
+}
+
 export interface PermissionView {
   id: string
   sessionID: string
@@ -35,6 +46,8 @@ export interface SessionView {
   tool?: string
   /** The last words the assistant said, while it is still saying them. */
   stream?: string
+  /** The agent's plan, when it keeps one. */
+  plan?: PlanStep[]
   /** Set while the session waits on the user to approve something. */
   permission?: PermissionView
   cost: number

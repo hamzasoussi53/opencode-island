@@ -3,6 +3,8 @@ import type {
   IslandState,
   PermissionDecision,
   PermissionView,
+  PlanState,
+  PlanStep,
   SessionPhase,
   SessionStatus,
   SessionView,
@@ -26,6 +28,7 @@ const WATCHED = [
   "session.tool.input.started",
   "session.tool.success",
   "session.tool.failed",
+  "session.tool.called",
   "session.agent.selected",
   "session.usage.updated",
   "session.text.started",
@@ -77,6 +80,10 @@ type Watched =
   | {
       type: "session.tool.success" | "session.tool.failed"
       data: { sessionID: string; id: string }
+    }
+  | {
+      type: "session.tool.called"
+      data: { sessionID: string; id: string; name: string; input: { [x: string]: any } }
     }
   | { type: "session.agent.selected"; data: { sessionID: string; agent: string } }
   | {
@@ -140,6 +147,46 @@ type Entry = SessionView & {
   reasoning: boolean
   /** The agent is writing its answer. */
   writing: boolean
+}
+
+/** The tool that holds the agent's plan. */
+const PLAN_TOOL = "todowrite"
+
+/** The tool's words, and the island's. */
+const PLAN_STATES: Record<string, PlanState> = {
+  completed: "done",
+  in_progress: "working",
+  pending: "waiting",
+  cancelled: "failed",
+}
+
+/**
+ * The steps of the agent's plan, out of a todo write. Anything that is not a
+ * list of todos gives no plan at all, and a step is never lost: one the tool
+ * words in a way the island does not know is a step that is waiting.
+ */
+export function parseTodos(input: unknown): PlanStep[] {
+  const todos = (input as { todos?: unknown } | null | undefined)?.todos
+  if (!Array.isArray(todos)) return []
+  return todos.map((todo, index) => {
+    const item = (todo ?? {}) as { content?: unknown; status?: unknown }
+    return {
+      n: index + 1,
+      title: typeof item.content === "string" ? item.content : "",
+      state: PLAN_STATES[String(item.status)] ?? "waiting",
+    }
+  })
+}
+
+/**
+ * The step the agent was on is the one that failed. A plan with nothing in
+ * hand is left as it is.
+ */
+export function failPlan(plan: PlanStep[] | undefined): PlanStep[] | undefined {
+  if (!plan?.length) return plan
+  const inHand = plan.findIndex((step) => step.state === "working")
+  if (inHand === -1) return plan
+  return plan.map((step, index) => (index === inHand ? { ...step, state: "failed" } : step))
 }
 
 export interface Reply {
@@ -300,12 +347,22 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
             break
           }
           case "session.idle":
-          case "session.execution.succeeded":
+          case "session.execution.succeeded": {
+            const entry = sessions.get(event.data.sessionID)
+            if (entry) {
+              entry.reasoning = false
+              entry.writing = false
+            }
+            touch(event.data.sessionID, { status: "idle", tool: undefined })
+            break
+          }
           case "session.execution.failed": {
             const entry = sessions.get(event.data.sessionID)
             if (entry) {
               entry.reasoning = false
               entry.writing = false
+              // The step the agent was on is the one that failed.
+              touch(event.data.sessionID, { plan: failPlan(entry.plan) })
             }
             touch(event.data.sessionID, { status: "idle", tool: undefined })
             break
@@ -328,6 +385,13 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
             entry.tools.delete(data.id)
             const next = entry.tools.values().next()
             entry.tool = next.done ? undefined : next.value
+            break
+          }
+          case "session.tool.called": {
+            const data = event.data
+            if (data.name !== PLAN_TOOL) break
+            const plan = parseTodos(data.input)
+            if (plan.length) touch(data.sessionID, { plan })
             break
           }
           case "session.agent.selected": {

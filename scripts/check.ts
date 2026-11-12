@@ -1,8 +1,9 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
-import { keepWords, lastWords } from "../src/model.ts"
+import { failPlan, keepWords, lastWords, parseTodos } from "../src/model.ts"
 import { islandShouldExist } from "../src/lifecycle.ts"
 import { barOrbState, orbState } from "../src/orb.ts"
+import type { PlanState } from "../src/state.ts"
 
 // The island shows the last ten words of an answer while it streams.
 assert.equal(lastWords("one two three", 10), "one two three")
@@ -42,6 +43,52 @@ assert.equal(orbState({ phase: "working", tool: "constructor" }), "working")
 assert.equal(barOrbState({ phase: "thinking" }, false), "breathing")
 assert.equal(barOrbState({ phase: "thinking" }, true), undefined)
 assert.equal(barOrbState(undefined, false), undefined)
+
+// The agent's plan comes out of its todo list, and only out of that.
+assert.deepEqual(parseTodos({ todos: [{ content: "Read it", status: "pending" }] }), [
+  { n: 1, title: "Read it", state: "waiting" },
+])
+assert.deepEqual(
+  parseTodos({
+    todos: [
+      { content: "Read it", status: "completed" },
+      { content: "Write it", status: "in_progress" },
+      { content: "Ship it", status: "pending" },
+    ],
+  }),
+  [
+    { n: 1, title: "Read it", state: "done" },
+    { n: 2, title: "Write it", state: "working" },
+    { n: 3, title: "Ship it", state: "waiting" },
+  ],
+)
+
+// A step is never lost, whatever the tool says.
+assert.deepEqual(parseTodos({ todos: [{ content: "Dropped", status: "cancelled" }] }), [
+  { n: 1, title: "Dropped", state: "failed" },
+])
+assert.deepEqual(parseTodos({ todos: [{ content: "Odd", status: "something-new" }] }), [
+  { n: 1, title: "Odd", state: "waiting" },
+])
+assert.deepEqual(parseTodos(undefined), [])
+assert.deepEqual(parseTodos({ todos: "not a list" }), [])
+assert.deepEqual(parseTodos({}), [])
+
+// The step in hand is the one that failed.
+assert.deepEqual(
+  failPlan([
+    { n: 1, title: "Read it", state: "done" },
+    { n: 2, title: "Write it", state: "working" },
+    { n: 3, title: "Ship it", state: "waiting" },
+  ]),
+  [
+    { n: 1, title: "Read it", state: "done" },
+    { n: 2, title: "Write it", state: "failed" },
+    { n: 3, title: "Ship it", state: "waiting" },
+  ],
+)
+assert.deepEqual(failPlan(undefined), undefined)
+assert.deepEqual(failPlan([]), [])
 
 // The island must not take the app's taskbar button with it, or there is
 // nothing to right-click to close OpenCode. It is a window option, so the
