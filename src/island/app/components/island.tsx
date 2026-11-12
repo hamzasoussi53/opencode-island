@@ -15,8 +15,9 @@ import {
   Sun,
 } from "@phosphor-icons/react"
 import { ThinkingOrb } from "thinking-orbs"
-import type { IslandMessage, PermissionDecision, SessionView } from "../../../state"
+import type { IslandMessage, PermissionDecision, PlanStep, SessionView } from "../../../state"
 import { barOrbState, orbState } from "../../../orb"
+import { planWindow } from "../../../plan"
 import { Button } from "@/components/ui/button"
 import { Toggle } from "@/components/ui/toggle"
 import { cn } from "@/lib/utils"
@@ -109,6 +110,30 @@ function OpenCodeMark({ className }: { className?: string }) {
       <path d="M180 240H60V120H180V240Z" fill="currentColor" />
       <path d="M180 60H60V240H180V60ZM240 300H0V0H240V300Z" fill="currentColor" fillRule="evenodd" />
     </svg>
+  )
+}
+
+/** One step of the plan: its number, and a dot that says where it stands. */
+function StepMark({ step, across }: { step: PlanStep; across?: boolean }) {
+  return (
+    <span
+      title={step.title}
+      className={cn(
+        "flex items-center gap-1 text-[10px] leading-none tabular-nums",
+        across ? "flex-col-reverse" : "flex-row",
+      )}
+    >
+      <span className="text-muted-foreground">{step.n}</span>
+      <span
+        className={cn(
+          "size-1.5 shrink-0 rounded-full",
+          step.state === "done" && "bg-success",
+          step.state === "working" && "step-live bg-warning",
+          step.state === "waiting" && "bg-waiting",
+          step.state === "failed" && "bg-destructive",
+        )}
+      />
+    </span>
   )
 }
 
@@ -493,6 +518,14 @@ export function Island() {
               <span className={cn("size-[7px] shrink-0 rounded-full transition-colors duration-300", dot)} />
             )}
           </span>
+          {/* The steps around the one in hand, in order. */}
+          {active?.plan?.length ? (
+            <span className="flex shrink-0 flex-row items-center gap-1.5">
+              {planWindow(active.plan).map((step) => (
+                <StepMark key={step.n} step={step} across />
+              ))}
+            </span>
+          ) : null}
           {work ? (
             <>
               {/* The words fill the bar and are cut, never the bar. They start
@@ -607,6 +640,16 @@ function Row({
           {label(session)}
           {session.tool ? <span className={cn("ml-1.5", muted)}>{session.tool}</span> : null}
         </div>
+        {session.plan?.length ? (
+          <div className="mt-0.5 flex items-center gap-1.5">
+            {session.plan.map((step) => (
+              <StepMark key={step.n} step={step} />
+            ))}
+            <span className={cn("text-[10.5px] tabular-nums", muted)}>
+              {session.plan.filter((step) => step.state === "done").length}/{session.plan.length}
+            </span>
+          </div>
+        ) : null}
         {session.stream ? (
           <div className={cn("truncate text-[11.5px]", muted)}>{session.stream}</div>
         ) : null}

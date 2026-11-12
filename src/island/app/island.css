@@ -20,6 +20,7 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-waiting: var(--waiting);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -48,6 +49,7 @@
   --success: #30d158;
   --warning: #ff9f0a;
   --warning-foreground: #1c1200;
+  --waiting: #ffd60a;
 }
 
 [data-theme="light"] {
@@ -68,6 +70,7 @@
   --input: rgba(0, 0, 0, 0.18);
   --ring: rgba(0, 0, 0, 0.4);
   --success: #248a3d;
+  --waiting: #b98900;
 }
 
 @layer base {
@@ -118,6 +121,29 @@
 
 @media (prefers-reduced-motion: reduce) {
   .count-pop {
+    animation: none;
+  }
+}
+
+/* The dot of the step in hand pulses, so it reads as alive without flashing. */
+@keyframes step-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgb(255 159 10 / 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 5px rgb(255 159 10 / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(255 159 10 / 0);
+  }
+}
+
+.step-live {
+  animation: step-pulse 1.8s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step-live {
     animation: none;
   }
 }
