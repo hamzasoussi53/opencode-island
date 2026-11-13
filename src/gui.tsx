@@ -30,12 +30,13 @@ export default Plugin.define({
     const send = () => island?.send(message())
 
     // The picks go on their own channel, and only when they change: the state
-    // is published on every token of every answer.
+    // is published on every token of every answer. `updated` moves on every
+    // token, so it is left out of the comparison; the order already carries it.
     let picksSent = ""
     const sendPicks = () => {
       if (!island || !model) return
       const picks = model.picks()
-      const key = JSON.stringify(picks)
+      const key = JSON.stringify(picks.map(({ updated: _updated, ...rest }) => rest))
       if (key === picksSent) return
       picksSent = key
       island.picks(picks)

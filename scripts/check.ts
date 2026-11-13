@@ -528,4 +528,17 @@ assert.match(windowSource, /\$\{CHANNEL\}:queued/)
 assert.match(windowSource, /\$\{CHANNEL\}:cancel/)
 assert.match(windowSource, /\$\{CHANNEL\}:drawer-size/)
 
+// The picks go on their own channel, so they never ride on every state.
+assert.match(windowSource, /\$\{CHANNEL\}:picks/)
+
+// The drawer is clamped in pixels, apart from the bar's share of the screen.
+assert.match(windowSource, /MIN_DRAWER_WIDTH = 320/)
+assert.match(windowSource, /MIN_DRAWER_HEIGHT = 240/)
+assert.match(windowSource, /DRAWER_HEIGHT_SHARE = 0\.8/)
+
+// The picks are compared without their per-token timestamp, so a streaming
+// answer does not resend the list on every token.
+const guiSource = readFileSync(new URL("../src/gui.tsx", import.meta.url), "utf8")
+assert.match(guiSource, /updated: _updated/)
+
 console.log("ok")

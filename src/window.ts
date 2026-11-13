@@ -124,8 +124,10 @@ export function createIslandWindow(options: IslandWindowOptions) {
   }
 
   let size = { width: 460, height: 240 }
-  // The open drawer's own size in pixels; null until it has been dragged, when
-  // the drawer is as tall as its content and the page reports that instead.
+  // The open drawer's size: as tall as its content until it is dragged, and the
+  // dragged size from then on. It is kept apart from the bar's share of the
+  // screen, so neither state can overwrite the other.
+  let content: { width: number; height: number } | null = null
   let drawer: { width: number; height: number } | null = null
   // Whether the island is showing its drawer, which decides which size applies.
   let open = false
@@ -138,7 +140,7 @@ export function createIslandWindow(options: IslandWindowOptions) {
   const place = (animate = false) => {
     if (window.isDestroyed()) return
     const area = screen.getPrimaryDisplay().workArea
-    const box = open && drawer ? drawer : size
+    const box = open ? (drawer ?? content ?? size) : size
     const middle = area.y + (area.height - box.height) / 2
     const y =
       anchorTop != null
@@ -165,15 +167,16 @@ export function createIslandWindow(options: IslandWindowOptions) {
 
   const onSize = (event: Electron.IpcMainEvent, next: { width?: number; height?: number }) => {
     if (!ours(event.sender)) return
-    // Once the drawer has been dragged its own size is in charge while it is
-    // open, so a content report must not take it back.
-    if (open && drawer) return
     const area = screen.getPrimaryDisplay().workArea
     const width = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(next?.width ?? 0)))
     // The page may ask for a share of the screen, so the ceiling is the screen.
     const height = Math.min(area.height, Math.max(24, Math.round(next?.height ?? 0)))
-    if (width === size.width && height === size.height) return
-    size = { width, height }
+    // The page reports the size it wants for the state it is in, so a report
+    // while the drawer is open belongs to the drawer, never to the bar.
+    const current = open ? content : size
+    if (width === current?.width && height === current?.height) return
+    if (open) content = { width, height }
+    else size = { width, height }
     // The first report happens while hidden; every later one is a drawer move.
     const first = !window.isVisible()
     place(!first)
@@ -193,17 +196,16 @@ export function createIslandWindow(options: IslandWindowOptions) {
 
   // The island shows a failed send where the user is, so the answer goes back
   // as a value rather than as a rejected request.
-  const onPrompt = (_event: Electron.IpcMainInvokeEvent, request: PromptRequest) =>
-    options.onPrompt(request)
+  const onPrompt = (event: Electron.IpcMainInvokeEvent, request: PromptRequest) => {
+    if (!ours(event.sender)) throw new Error("not the island")
+    return options.onPrompt(request)
+  }
 
-  // A queue that cannot be read fails the request, so the island can say so:
-  // an empty list would claim the queue is empty.
-  const onQueued = async (_event: Electron.IpcMainInvokeEvent, sessionID: string) => {
-    try {
-      return await options.onQueued(sessionID)
-    } catch (error) {
-      throw new Error(error instanceof Error ? error.message : String(error))
-    }
+  // A queue that cannot be read rejects the request on purpose, so the island
+  // can say the queue could not be read: an empty list would say it is empty.
+  const onQueued = (event: Electron.IpcMainInvokeEvent, sessionID: string) => {
+    if (!ours(event.sender)) throw new Error("not the island")
+    return options.onQueued(sessionID)
   }
 
   const onCancel = (
@@ -347,8 +349,10 @@ export function createIslandWindow(options: IslandWindowOptions) {
       if (window.isDestroyed()) return
       if (message.open !== open) {
         open = message.open
-        // Which size applies is decided here, when the island opens or closes.
-        if (drawer) place()
+        // The page reports the drawer's content size a moment after it opens,
+        // so the window waits for it rather than flashing the bar's width.
+        // Closing already has a size: the bar's own.
+        if (!open || drawer || content) place()
       }
       window.webContents.send(`${CHANNEL}:state`, message)
     },
