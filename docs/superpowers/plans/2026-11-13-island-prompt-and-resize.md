@@ -730,4 +730,5 @@ git commit -m "docs: the island takes prompts, and it resizes"
 Bump the version in `package.json`, commit, push the branch and the tag,
 publish to npm, create the GitHub release with the notes on what the
 composer is and how the drawer resizes, and publish the landing page with
-`sh scripts/pages.sh`.
+`sh scripts/pages.sh`. Then follow `AGENTS.md`: post the release on X, mirror
+the OpenCode profile, and post the release on opencode.cafe.

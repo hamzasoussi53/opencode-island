@@ -242,17 +242,25 @@ async function run(events: unknown[], at = server()): Promise<IslandState> {
 /**
  * A server's session list, built from the fields the model reads. The list
  * carries no status: a seeded session is idle until an event says otherwise.
+ * A session with no `viewed` was never opened in OpenCode, so it is no tab.
  */
 function listedOf(
-  sessions: Array<{ id: string; title: string; agent: string; status: string; updated: number }>,
+  sessions: Array<{
+    id: string
+    title: string
+    agent: string
+    status: string
+    updated: number
+    viewed?: number
+  }>,
 ) {
-  return sessions.map(({ id, title, agent, updated }) => ({
+  return sessions.map(({ id, title, agent, updated, viewed }) => ({
     id,
     title,
     agent,
     cost: 0,
     tokens: { input: 0, output: 0 },
-    time: { created: updated, updated },
+    time: { created: updated, updated, viewed },
     location: { directory: "/tmp/project" },
   }))
 }
@@ -433,17 +441,35 @@ const nested = await run([
 ])
 assert.deepEqual(nested.sessions[0]?.plan, [{ n: 1, title: "Read it", state: "working" }])
 
-// The picks are every session the model knows, newest first, running ones
-// among them, and a finished session is still there.
+// The picks are the sessions open as tabs in OpenCode, the last opened first.
+// A session that was never opened is not a tab, so it is not offered, however
+// recently it was touched.
 const picks = await picksOf([
-  { id: "s1", title: "Older", agent: "build", status: "idle", updated: 100 },
-  { id: "s2", title: "Newer", agent: "build", status: "busy", updated: 200 },
+  { id: "s1", title: "Older tab", agent: "build", status: "idle", updated: 100, viewed: 500 },
+  { id: "s2", title: "Never opened", agent: "build", status: "busy", updated: 900 },
+  { id: "s3", title: "Last tab", agent: "build", status: "idle", updated: 50, viewed: 800 },
 ])
 assert.deepEqual(
   picks.map((pick) => pick.id),
-  ["s2", "s1"],
+  ["s3", "s1"],
 )
-assert.equal(picks[0]?.title, "Newer")
+assert.equal(picks[0]?.title, "Last tab")
+assert.equal(picks[0]?.viewed, 800)
+
+// A tab opened while the island is connected becomes one, from the event
+// alone: the list is not asked for again.
+const opened = await modelOn(
+  server({
+    sessions: listedOf([
+      { id: "s1", title: "Work", agent: "build", status: "idle", updated: 100 },
+    ]),
+  }),
+  [{ type: "session.viewed", created: 700, data: { sessionID: "s1", idle: 0 } }],
+)
+assert.deepEqual(
+  opened.model.picks().map((pick) => [pick.id, pick.viewed]),
+  [["s1", 700]],
+)
 
 // A session too old to be a row is still one you can pick: it is exactly the
 // one you come back to.
@@ -454,6 +480,7 @@ const yesterday = [
     agent: "build",
     status: "idle",
     updated: Date.now() - 7 * 60 * 60 * 1000,
+    viewed: Date.now() - 7 * 60 * 60 * 1000,
   },
 ]
 const { model: old, state: oldState } = await modelOn(server({ sessions: listedOf(yesterday) }))
@@ -570,5 +597,15 @@ assert.match(islandSource, /island\.cancel\(/)
 // The keyboard goes back to the app after a send, so a stray Enter cannot
 // send a second prompt.
 assert.match(islandSource, /window\.blur\(\)/)
+
+// The tabs open in OpenCode arrive on their own channel and are held in the
+// island's own state, so they never ride on every token of every answer.
+assert.match(islandSource, /onPicks/)
+assert.doesNotMatch(islandSource, /picks:\s*picks/)
+
+// The list is drawn from the picks, and a picked tab is named even when it has
+// no live row: the chip asks the picks before the sessions.
+assert.match(islandSource, /picks\.map\(/)
+assert.match(islandSource, /picks\.find\(/)
 
 console.log("ok")

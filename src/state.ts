@@ -66,7 +66,7 @@ export interface IslandState {
   waiting: number
 }
 
-/** A session you can pick to send a prompt to. */
+/** A session open as a tab in OpenCode, to send a prompt to. */
 export interface SessionPick {
   id: string
   title: string
@@ -74,11 +74,13 @@ export interface SessionPick {
   /** Absolute path of the project the session belongs to. */
   directory: string
   status: SessionStatus
+  /** Epoch millis of when the session was last opened in OpenCode. */
+  viewed?: number
   /** Epoch millis of the last event that touched this session. */
   updated: number
 }
 
-/** Every session the island knows about, newest first. */
+/** The sessions open as tabs in OpenCode, the last opened first. */
 export type SessionPicks = SessionPick[]
 
 /** A prompt waiting for a session's turn to end. */

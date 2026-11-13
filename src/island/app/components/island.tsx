@@ -21,6 +21,7 @@ import type {
   PermissionDecision,
   PlanStep,
   QueuedPrompt,
+  SessionPicks,
   SessionView,
 } from "../../../state"
 import { barOrbState, orbState } from "../../../orb"
@@ -110,6 +111,11 @@ function rowsOf(sessions: SessionView[]) {
   return rows
 }
 
+/** The last segment of a project path, which is the project's own name. */
+function lastSegment(path: string) {
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? ""
+}
+
 /** OpenCode's own mark, taken from opencode.ai. */
 function OpenCodeMark({ className }: { className?: string }) {
   return (
@@ -159,6 +165,8 @@ export function Island() {
   const [ready, setReady] = useState(false)
   /** The session the user picked to send to, so the choice outlives the drawer. */
   const [picked, setPicked] = useState<string | null>(null)
+  /** The tabs open in OpenCode, on their own channel: they never ride on a message. */
+  const [picks, setPicks] = useState<SessionPicks>([])
   /** True while the target chip's session list is open. */
   const [picking, setPicking] = useState(false)
 
@@ -176,6 +184,7 @@ export function Island() {
 
   useEffect(() => {
     window.island.onState(setState)
+    window.island.onPicks(setPicks)
     window.island.ready()
     void window.island
       .screen()
@@ -380,8 +389,12 @@ export function Island() {
   const barOrb = barOrbState(active, alert)
   const rows = rowsOf(sessions)
   // The chip names the session in hand, which is the picked one or the one
-  // the bar is already showing.
-  const target = sessions.find((session) => session.id === picked) ?? active
+  // the bar is already showing. A tab open in OpenCode may have no live row,
+  // so the picked id is looked up in the picks first.
+  const chosen = picked
+    ? picks.find((pick) => pick.id === picked) ?? sessions.find((session) => session.id === picked)
+    : undefined
+  const target = chosen ?? active
   const pending = sessions.find((session) => session.permission)?.permission
   const totalTokens = sessions.reduce((sum, session) => sum + (session.tokens || 0), 0)
   const totalCost = sessions.reduce((sum, session) => sum + (session.cost || 0), 0)
@@ -454,9 +467,14 @@ export function Island() {
 
           <Composer
             target={target}
+            picks={picks}
             alert={alert}
             picking={picking}
             onPick={() => setPicking((open) => !open)}
+            onChoose={(id) => {
+              setPicked(id)
+              setPicking(false)
+            }}
           />
 
           <div className="flex items-center gap-1 border-t px-2 py-1.5">
@@ -727,17 +745,94 @@ type Queue =
   | { state: "ready"; items: QueuedPrompt[] }
   | { state: "failed" }
 
+/**
+ * The tabs open in OpenCode, last opened first, each named by its title, its
+ * agent and its project. A running one carries a dot so it is never taken for
+ * a finished tab.
+ */
+function Picker({
+  picks,
+  target,
+  onChoose,
+}: {
+  picks: SessionPicks
+  target: string | undefined
+  onChoose: (id: string) => void
+}) {
+  return (
+    <ul
+      role="listbox"
+      aria-label="Sessions open in OpenCode"
+      onKeyDown={(event) => {
+        // A listbox moves with the arrows, not only with Tab.
+        if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return
+        event.preventDefault()
+        const options = [...event.currentTarget.querySelectorAll<HTMLElement>("[role='option']")]
+        const at = options.indexOf(document.activeElement as HTMLElement)
+        options[at + (event.key === "ArrowDown" ? 1 : -1)]?.focus()
+      }}
+      className="mb-1.5 max-h-[168px] overflow-y-auto rounded-md border bg-background p-1 text-foreground"
+    >
+      {picks.length ? (
+        picks.map((pick) => {
+          const running = pick.status === "busy" || pick.status === "retry"
+          const project = lastSegment(pick.directory)
+          return (
+            <li key={pick.id}>
+              <button
+                role="option"
+                aria-selected={pick.id === target}
+                onClick={() => onChoose(pick.id)}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-sm px-1.5 py-1 text-left",
+                  pick.id === target ? "bg-accent/50" : "hover:bg-accent/40",
+                )}
+              >
+                <span
+                  aria-hidden="true"
+                  title={running ? "Running" : "Not running"}
+                  className={cn(
+                    "size-[7px] shrink-0 rounded-full",
+                    running ? "bg-success" : "bg-muted-foreground/40",
+                  )}
+                />
+                <span className="sr-only">{running ? "Running" : "Not running"}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[12.5px]">
+                    {pick.title || "Untitled session"}
+                  </span>
+                  <span className="block truncate text-[11px] text-muted-foreground">
+                    {[pick.agent, project].filter(Boolean).join(" · ")}
+                  </span>
+                </span>
+              </button>
+            </li>
+          )
+        })
+      ) : (
+        <li className="px-1.5 py-1 text-[11.5px] text-muted-foreground">
+          No sessions open in OpenCode
+        </li>
+      )}
+    </ul>
+  )
+}
+
 /** One field, sent to the session the chip names. */
 function Composer({
   target,
+  picks,
   alert,
   picking,
   onPick,
+  onChoose,
 }: {
-  target: SessionView | undefined
+  target: { id: string; title: string } | undefined
+  picks: SessionPicks
   alert: boolean
   picking: boolean
   onPick: () => void
+  onChoose: (id: string) => void
 }) {
   const [text, setText] = useState("")
   /** What went wrong with the last send, kept in the island where the user is. */
@@ -814,6 +909,10 @@ function Composer({
 
   return (
     <div data-composer className="border-t px-3 py-2">
+      {/* The tabs open in OpenCode, above the chip: the composer keeps its
+          place at the foot of the drawer whatever the list holds. */}
+      {picking ? <Picker picks={picks} target={target?.id} onChoose={onChoose} /> : null}
+
       <div className="flex items-center gap-1.5">
         <Button
           variant="outline"

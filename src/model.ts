@@ -40,6 +40,7 @@ const WATCHED = [
   "session.reasoning.ended",
   "permission.asked",
   "permission.replied",
+  "session.viewed",
 ] as const
 
 /**
@@ -123,6 +124,7 @@ type Watched =
       }
     }
   | { type: "permission.replied"; data: { sessionID: string; requestID: string } }
+  | { type: "session.viewed"; created: number; data: { sessionID: string; idle: number } }
 
 /** A session untouched for this long stops being worth a row. */
 const EVICT_AFTER_MS = 6 * 60 * 60 * 1000
@@ -175,6 +177,14 @@ export interface Reply {
  */
 export function createModel(client: Client, onChange: (state: IslandState) => void) {
   const sessions = new Map<string, Entry>()
+
+  /**
+   * When each session was last opened in OpenCode, which is what makes it a
+   * tab. A session with no entry here was never opened, so it is no tab. It is
+   * kept apart from the session so a view never counts as activity, and so a
+   * view that arrives before the seed is not lost.
+   */
+  const viewed = new Map<string, number>()
 
   const ensure = (id: string): Entry => {
     const found = sessions.get(id)
@@ -249,21 +259,20 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
   const publish = () => onChange(state())
 
   /**
-   * Every session the model knows, newest first. It is read off the same map
-   * the rows come from, so a session the rows evicted is still here to pick:
-   * the eviction only hides a row, it never forgets the session.
+   * The sessions open as tabs in OpenCode, the last opened first. It is read
+   * off the same map the rows come from, so a session the rows evicted is
+   * still here to pick: the eviction only hides a row, it never forgets the
+   * session. A session that was never opened is not a tab, so it is left out.
    */
   const picks = (): SessionPicks =>
     [...sessions.values()]
-      .map(({ id, title, agent, directory, status, updated }) => ({
-        id,
-        title,
-        agent,
-        directory,
-        status,
-        updated,
-      }))
-      .sort((a, b) => b.updated - a.updated)
+      .flatMap(({ id, title, agent, directory, status, updated }) => {
+        const opened = viewed.get(id)
+        return opened === undefined
+          ? []
+          : [{ id, title, agent, directory, status, viewed: opened, updated }]
+      })
+      .sort((a, b) => (b.viewed ?? 0) - (a.viewed ?? 0))
       .slice(0, PICK_LIMIT)
 
   /** Runs a call the island asked for, and answers rather than throws. */
@@ -307,6 +316,10 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
         client.permission.request.list(undefined, { signal }),
       ])
       for (const info of listed.data) {
+        // The list is a snapshot: a view event that beat it here is fresher.
+        if (info.time.viewed !== undefined && !viewed.has(info.id)) {
+          viewed.set(info.id, info.time.viewed)
+        }
         // A live event may have beaten the list here; keep the fresher record.
         if (sessions.has(info.id)) continue
         sessions.set(info.id, {
@@ -356,6 +369,7 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
           }
           case "session.deleted": {
             sessions.delete(event.data.sessionID)
+            viewed.delete(event.data.sessionID)
             break
           }
           case "session.renamed": {
@@ -508,6 +522,12 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
               entry.permission = undefined
               entry.updated = Date.now()
             }
+            break
+          }
+          case "session.viewed": {
+            // Opening a tab is not activity, so the row's own time is left
+            // alone; the session becomes one you can pick.
+            viewed.set(event.data.sessionID, event.created)
             break
           }
         }
