@@ -398,20 +398,45 @@ git commit -m "feat: the composer sends a prompt to the session in hand"
 
 ---
 
-### Task 4: The session list, and picking a session that is done
+### Task 4: The picker, listing the tabs open in OpenCode
 
 **Files:**
+- Modify: `src/state.ts` (the pick's `viewed` field)
+- Modify: `src/model.ts` (the picks are the viewed sessions, newest first)
 - Modify: `src/island/app/components/island.tsx` (the list, the picks channel)
 - Test: `scripts/check.ts`
 
 **Interfaces:**
 - Consumes: Task 2's `window.island.onPicks`, Task 3's composer.
-- Produces: the island holds the picks list in its own state, and the target
-  chip opens a list built from it.
+- Produces:
+  - `src/state.ts`: `SessionPick` gains `viewed?: number` — the epoch millis
+    of when the session was last opened in OpenCode, absent when it never was.
+  - `src/model.ts`: `picks(): SessionPicks` returns **only the sessions that
+    have been viewed**, ordered by `viewed` newest first.
+  - `src/island/app/components/island.tsx`: the island holds the picks list in
+    its own state, and the target chip opens a list built from it.
+
+**The design this task implements:** `docs/superpowers/specs/2026-11-13-island-tabs-picker-design.md`
 
 - [ ] **Step 1: Write the failing test**
 
+In `scripts/check.ts`, the picks tests change: a session that has been opened
+in OpenCode is a tab and is offered; one that never was, is not.
+
 ```ts
+// A session opened in OpenCode is a tab, and is offered. One that never was
+// opened is not.
+const viewed = await picksOf([
+  { id: "s1", title: "Older tab", agent: "build", status: "idle", updated: 100, viewed: 100 },
+  { id: "s2", title: "Newer tab", agent: "build", status: "busy", updated: 200, viewed: 200 },
+  { id: "s3", title: "Never opened", agent: "build", status: "idle", updated: 300 },
+])
+assert.deepEqual(
+  viewed.map((pick) => pick.id),
+  ["s2", "s1"],
+)
+assert.equal(viewed[0]?.viewed, 200)
+
 // The island keeps the picks in its own state, and does not carry them on
 // every message.
 assert.match(islandSource, /onPicks/)
@@ -421,39 +446,73 @@ assert.doesNotMatch(islandSource, /picks:\s*picks/)
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `npm run check`
-Expected: FAIL — the island does not listen for the picks.
+Expected: FAIL — the picks are every session, not the opened ones.
 
-- [ ] **Step 3: Hold the picks and draw the list**
+- [ ] **Step 3: Give the pick its viewed time**
+
+In `src/state.ts`, `SessionPick` gains:
+
+```ts
+  /** Epoch millis of when the session was last opened in OpenCode. */
+  viewed?: number
+```
+
+- [ ] **Step 4: Make the picks the opened sessions**
+
+In `src/model.ts`, `picks()` returns only the sessions that have a `viewed`
+time, ordered by `viewed` newest first. A session that was never opened in
+OpenCode is not a tab, so it is not offered.
+
+The seed already reads `Session.Info` from `client.session.list({limit: 200})`,
+and `Session.Info.time.viewed` carries the time. The model keeps that time on
+the entry so `picks()` can use it, and `session.viewed` on the stream updates
+it for a session opened while the island is connected.
+
+- [ ] **Step 5: Draw the list**
 
 In `src/island/app/components/island.tsx`:
 
 - The island subscribes to `window.island.onPicks` and keeps the list in
   its own state. The list does **not** go on `IslandMessage`, which is
   published on every token of every answer.
-- The list the target chip opens is the running sessions first, then the
-  finished ones newest first, each showing its title, its agent and the last
-  segment of its project path. A running one carries a mark so it is never
-  confused with a finished one. There is **no search box**: the list is there
-  to pick a session you are already looking at, and a filter field would take
-  the room the composer needs.
+- The list the target chip opens is the opened sessions, most recently opened
+  first, each showing its title, its agent and the last segment of its project
+  path. A running one carries a mark so it is never confused with an idle
+  one. There is **no search box**: the list is there to pick a session you
+  already have open, and a filter field would take the room the composer
+  needs.
 - Choosing a session sets the same selected id the rows set, so the fast
   path and the list cannot disagree.
+- The composer's target resolves a picked id against the **picks**, so a
+  session that is open in OpenCode but no longer running can still be sent a
+  prompt. The rows are the live sessions; the picks are the tabs.
 - The list is drawn above the target chip, so it does not push the composer
   out of the drawer.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [ ] **Step 6: Run the test to verify it passes**
 
-Run: `npm run check`
-Expected: PASS — prints `ok`.
+Run: `npm run check` and `npm run typecheck`
+Expected: `ok`, and no type error.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Look at it in a real window**
+
+Run: `npm run build`, then copy `dist/island/index.html` to
+`/tmp/etest/island.html` and run
+`cd /tmp/etest && /tmp/e45/Electron.app/Contents/MacOS/Electron main-composer.js`.
+
+The stub bridge must send two sessions with a `viewed` time, one opened more
+recently, and the harness must show the picker opening with both, in the
+order they were opened.
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add src/island/app/components/island.tsx scripts/check.ts
-git commit -m "feat: pick a session to send a prompt to, running or finished"
+git add src/state.ts src/model.ts src/island/app/components/island.tsx scripts/check.ts
+git commit -m "feat: the picker lists the sessions open in OpenCode"
 ```
 
 ---
+
 
 ### Task 5: The drawer resizes, and keeps its size
 
