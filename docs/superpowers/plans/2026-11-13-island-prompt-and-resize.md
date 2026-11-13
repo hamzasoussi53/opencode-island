@@ -591,7 +591,108 @@ git commit -m "feat: the open island resizes, and keeps its size"
 
 ---
 
-### Task 6: The docs, and the ship
+### Task 6: The drawer stays open until you close it
+
+**Files:**
+- Modify: `src/state.ts` (the auto-close mode)
+- Modify: `src/island/app/components/island.tsx` (the toggle, the saved setting)
+- Modify: `src/island/app/global.d.ts` (the bridge's types)
+- Modify: `src/island/preload.cjs` (the bridge)
+- Modify: `src/window.ts` (the channel, the key that closes the drawer)
+- Modify: `src/gui.tsx` (the blur rule)
+- Test: `scripts/check.ts`
+
+**Interfaces:**
+- Consumes: nothing from earlier tasks.
+- Produces:
+  - `src/state.ts`: `export type AutoClose = "close" | "stay"`.
+  - `src/island/app/global.d.ts` and `src/island/preload.cjs`: the page gets
+    `autoClose(mode: AutoClose) => void` and
+    `onAutoClose(handler: (mode: AutoClose) => void) => void`.
+  - `src/island/app/components/island.tsx`: the setting is kept in
+    `localStorage` under `opencode-island:auto-close`, as `"close"` or
+    `"stay"`, defaulting to `"stay"`.
+  - `src/gui.tsx`: `onBlur` closes the drawer only when the mode is
+    `"close"`.
+
+**The design this task implements:** `docs/superpowers/specs/2026-11-13-island-stays-open-design.md`
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// The drawer stays open by default, and the toggle turns the old behaviour
+// back on.
+assert.match(islandSource, /opencode-island:auto-close/)
+assert.match(islandSource, /autoClose/)
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `npm run check`
+Expected: FAIL — the island has no auto-close setting.
+
+- [ ] **Step 3: Add the mode and the bridge**
+
+In `src/state.ts`:
+
+```ts
+/** Whether the open drawer closes when the app takes the focus back. */
+export type AutoClose = "close" | "stay"
+```
+
+In `src/island/app/global.d.ts` and `src/island/preload.cjs`, add
+`autoClose(mode)` and `onAutoClose(handler)`.
+
+- [ ] **Step 4: Draw the toggle and keep the setting**
+
+In `src/island/app/components/island.tsx`:
+
+- The drawer's footer gains a **toggle** next to the other controls, next to
+  click-through, which is the closest thing to it: both are about how the
+  island behaves rather than what it shows.
+- The toggle reads **Auto-close** when the drawer will close on blur, and
+  **Stay open** when it will not. Its pressed state shows which.
+- The setting is kept in `localStorage` under `opencode-island:auto-close`,
+  as `"close"` or `"stay"`. **The default is `"stay"`**: the drawer stays
+  open until it is closed, which is the new behaviour.
+- The island tells the plugin's main half when the setting changes, so the
+  main half's blur rule knows what to do.
+- **Escape closes the drawer.** The drawer no longer closes on blur, so it
+  needs a way to close that does not depend on the island having focus.
+
+- [ ] **Step 5: Change the blur rule**
+
+In `src/gui.tsx`, `onBlur` closes the drawer only when the mode is
+`"close"`. A session waiting on a permission still keeps it open either way.
+
+In `src/window.ts`, the window carries the mode, hands it over, and closes
+the drawer on Escape.
+
+- [ ] **Step 6: Run the test to verify it passes**
+
+Run: `npm run check` and `npm run typecheck`
+Expected: `ok`, and no type error.
+
+- [ ] **Step 7: Build and look at it in a real window**
+
+Run: `npm run build`, then copy `dist/island/index.html` to
+`/tmp/etest/island.html` and run
+`cd /tmp/etest && /tmp/e45/Electron.app/Contents/MacOS/Electron main-composer.js`.
+
+The harness must show the toggle in the footer, and the drawer must still be
+open after the page loses focus.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add src/state.ts src/island/app/components/island.tsx src/island/app/global.d.ts src/island/preload.cjs src/window.ts src/gui.tsx scripts/check.ts
+git commit -m "feat: the open island stays open until you close it"
+```
+
+---
+
+
+### Task 7: The docs, and the ship
 
 **Files:**
 - Modify: `README.md`
