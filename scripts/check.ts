@@ -547,8 +547,23 @@ const islandSource = readFileSync(
   "utf8",
 )
 assert.match(islandSource, /onKeyDown/)
-assert.match(islandSource, /delivery: "steer"/)
-assert.match(islandSource, /delivery: "queue"/)
+// Enter steers and the menu's Queue waits for the turn, through one send that
+// hands the delivery to the bridge.
+assert.match(islandSource, /send\("steer"\)/)
+assert.match(islandSource, /send\("queue"\)/)
+assert.match(
+  islandSource,
+  /island\.prompt\(\{ sessionID: target\.id, text: body, delivery \}\)/,
+)
+// An empty field sends nothing, and a send in flight is not sent twice.
+assert.match(islandSource, /if \(!body \|\| !target \|\| sending\.current\) return/)
+// A failed send is said in the composer, and the text stays in the field.
+assert.match(islandSource, /setError\(answer\.error \|\| "The prompt could not be sent"\)/)
+assert.match(islandSource, /\{error \? \(/)
+// A queue the server would not read is a failure, never an empty list.
+assert.match(islandSource, /\.catch\(\(\) => \{/)
+assert.match(islandSource, /setQueue\(\{ state: "failed" \}\)/)
+assert.match(islandSource, /The queue could not be read/)
 // The queue is asked for, not counted, and one prompt can be taken back.
 assert.match(islandSource, /island\.queued\(/)
 assert.match(islandSource, /island\.cancel\(/)

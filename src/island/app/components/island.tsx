@@ -424,7 +424,7 @@ export function Island() {
                   now={now}
                   alert={alert}
                   selected={picked === session.id}
-                  onSelect={setPicked}
+                  onSelect={sub ? undefined : setPicked}
                 />
               ))
             ) : (
@@ -643,7 +643,8 @@ function Row({
   now: number
   alert: boolean
   selected: boolean
-  onSelect: (id: string) => void
+  /** Absent on a subagent row: a prompt goes to the session, not its helper. */
+  onSelect?: (id: string) => void
 }) {
   const waiting = Boolean(session.permission)
   const muted = alert ? "text-warning-foreground/70" : "text-muted-foreground"
@@ -652,9 +653,22 @@ function Row({
   return (
     <div
       data-row
-      onClick={() => onSelect(session.id)}
+      role={onSelect ? "button" : undefined}
+      tabIndex={onSelect ? 0 : undefined}
+      aria-pressed={onSelect ? selected : undefined}
+      onClick={onSelect ? () => onSelect(session.id) : undefined}
+      onKeyDown={
+        onSelect
+          ? (event) => {
+              if (event.key !== "Enter" && event.key !== " ") return
+              event.preventDefault()
+              onSelect(session.id)
+            }
+          : undefined
+      }
       className={cn(
-        "grid cursor-pointer grid-cols-[20px_1fr_auto] items-start gap-2.5 px-4 py-1.5",
+        "grid grid-cols-[20px_1fr_auto] items-start gap-2.5 px-4 py-1.5",
+        onSelect && "cursor-pointer",
         selected && "bg-accent/50",
         sub && "pl-9",
       )}
@@ -730,8 +744,15 @@ function Composer({
   const [error, setError] = useState("")
   const [menu, setMenu] = useState(false)
   const [queue, setQueue] = useState<Queue>({ state: "reading" })
+  /** True between asking for a send and hearing back, so Enter cannot double it. */
+  const sending = useRef(false)
   const targetID = target?.id
   const name = target?.title || "Untitled session"
+
+  // A failure belongs to the session it was about, not to the next one.
+  useEffect(() => {
+    setError("")
+  }, [targetID])
 
   // The queue is asked of the server when the menu opens, never counted.
   useEffect(() => {
@@ -752,13 +773,14 @@ function Composer({
     }
   }, [menu, targetID])
 
-  const finish = (answer: { ok: boolean; error?: string }) => {
+  const finish = (answer: { ok: boolean; error?: string }, body: string) => {
     if (!answer.ok) {
       // The text stays in the field, so the send can be tried again.
       setError(answer.error || "The prompt could not be sent")
       return
     }
-    setText("")
+    // Anything typed while the send was in flight is not thrown away.
+    setText((current) => (current.trim() === body ? "" : current))
     setError("")
     setMenu(false)
     // The keyboard goes back to the app, so a stray Enter cannot send again.
@@ -767,21 +789,22 @@ function Composer({
 
   const send = async (delivery: "steer" | "queue") => {
     const body = text.trim()
-    if (!body || !target) return
+    // An empty field sends nothing, and a send in flight is not sent twice.
+    if (!body || !target || sending.current) return
     setError("")
-    const request = { sessionID: target.id, text: body }
-    finish(
-      await window.island.prompt(
-        delivery === "queue"
-          ? { ...request, delivery: "queue" }
-          : { ...request, delivery: "steer" },
-      ),
-    )
+    sending.current = true
+    try {
+      finish(await window.island.prompt({ sessionID: target.id, text: body, delivery }), body)
+    } finally {
+      sending.current = false
+    }
   }
 
   const cancel = (inboxID: string) => {
     if (!target) return
     window.island.cancel({ sessionID: target.id, inboxID })
+    // shortcut: the list trusts that the server took the cancel, because
+    // window.island.cancel answers nothing; upgrade when it answers.
     setQueue((current) =>
       current.state === "ready"
         ? { state: "ready", items: current.items.filter((item) => item.id !== inboxID) }
@@ -817,7 +840,11 @@ function Composer({
             alert && "border-warning-foreground/30 placeholder:text-warning-foreground/60",
           )}
           value={text}
-          onChange={(event) => setText(event.target.value)}
+          onChange={(event) => {
+            setText(event.target.value)
+            // A new attempt is not the last one's failure.
+            if (error) setError("")
+          }}
           onKeyDown={(event) => {
             // An Enter that closes an input method's composition is not a send.
             if (event.key !== "Enter" || event.nativeEvent.isComposing) return

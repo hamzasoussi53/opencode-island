@@ -106,6 +106,7 @@
 /* The page takes no text selection, but the composer's field is a field. */
 .composer-field {
   user-select: text;
+  cursor: text;
 }
 
 /* The count of working agents pops in when it changes. */
