@@ -316,9 +316,11 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
         client.permission.request.list(undefined, { signal }),
       ])
       for (const info of listed.data) {
-        // The list is a snapshot: a view event that beat it here is fresher.
-        if (info.time.viewed !== undefined && !viewed.has(info.id)) {
-          viewed.set(info.id, info.time.viewed)
+        // The list is a snapshot, and a reconnect's list may be newer than the
+        // views already held; a view event that beat it here may be newer
+        // still. A session with no view is left out, so it stays no tab.
+        if (info.time.viewed !== undefined) {
+          viewed.set(info.id, Math.max(viewed.get(info.id) ?? 0, info.time.viewed))
         }
         // A live event may have beaten the list here; keep the fresher record.
         if (sessions.has(info.id)) continue
@@ -527,6 +529,9 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
           case "session.viewed": {
             // Opening a tab is not activity, so the row's own time is left
             // alone; the session becomes one you can pick.
+            // shortcut: a view for an id the model never seeded is remembered
+            // but never offered, because the picker reads the sessions map;
+            // upgrade when a tab older than the seed's cap must be pickable.
             viewed.set(event.data.sessionID, event.created)
             break
           }

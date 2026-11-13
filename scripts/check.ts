@@ -608,4 +608,10 @@ assert.doesNotMatch(islandSource, /picks:\s*picks/)
 assert.match(islandSource, /picks\.map\(/)
 assert.match(islandSource, /picks\.find\(/)
 
+// The chip opens the list even when nothing is running: the tabs it offers are
+// the ones the rows have already forgotten. With nothing picked yet it says
+// what it does, rather than naming a session that is not there.
+assert.match(islandSource, /disabled=\{!target && !picks\.length\}/)
+assert.match(islandSource, /"Pick a session"/)
+
 console.log("ok")

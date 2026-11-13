@@ -760,7 +760,7 @@ function Picker({
   onChoose: (id: string) => void
 }) {
   return (
-    <ul
+    <div
       role="listbox"
       aria-label="Sessions open in OpenCode"
       onKeyDown={(event) => {
@@ -774,47 +774,47 @@ function Picker({
       className="mb-1.5 max-h-[168px] overflow-y-auto rounded-md border bg-background p-1 text-foreground"
     >
       {picks.length ? (
+        // The options are the listbox's own children, as ARIA requires.
         picks.map((pick) => {
           const running = pick.status === "busy" || pick.status === "retry"
           const project = lastSegment(pick.directory)
           return (
-            <li key={pick.id}>
-              <button
-                role="option"
-                aria-selected={pick.id === target}
-                onClick={() => onChoose(pick.id)}
+            <button
+              key={pick.id}
+              role="option"
+              aria-selected={pick.id === target}
+              onClick={() => onChoose(pick.id)}
+              className={cn(
+                "flex w-full items-center gap-2 rounded-sm px-1.5 py-1 text-left",
+                pick.id === target ? "bg-accent/50" : "hover:bg-accent/40",
+              )}
+            >
+              <span
+                aria-hidden="true"
+                title={running ? "Running" : "Not running"}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-sm px-1.5 py-1 text-left",
-                  pick.id === target ? "bg-accent/50" : "hover:bg-accent/40",
+                  "size-[7px] shrink-0 rounded-full",
+                  running ? "bg-success" : "bg-muted-foreground/40",
                 )}
-              >
-                <span
-                  aria-hidden="true"
-                  title={running ? "Running" : "Not running"}
-                  className={cn(
-                    "size-[7px] shrink-0 rounded-full",
-                    running ? "bg-success" : "bg-muted-foreground/40",
-                  )}
-                />
-                <span className="sr-only">{running ? "Running" : "Not running"}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[12.5px]">
-                    {pick.title || "Untitled session"}
-                  </span>
-                  <span className="block truncate text-[11px] text-muted-foreground">
-                    {[pick.agent, project].filter(Boolean).join(" · ")}
-                  </span>
+              />
+              <span className="sr-only">{running ? "Running" : "Not running"}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[12.5px]">
+                  {pick.title || "Untitled session"}
                 </span>
-              </button>
-            </li>
+                <span className="block truncate text-[11px] text-muted-foreground">
+                  {[pick.agent, project].filter(Boolean).join(" · ")}
+                </span>
+              </span>
+            </button>
           )
         })
       ) : (
-        <li className="px-1.5 py-1 text-[11.5px] text-muted-foreground">
+        <p className="px-1.5 py-1 text-[11.5px] text-muted-foreground">
           No sessions open in OpenCode
-        </li>
+        </p>
       )}
-    </ul>
+    </div>
   )
 }
 
@@ -842,7 +842,10 @@ function Composer({
   /** True between asking for a send and hearing back, so Enter cannot double it. */
   const sending = useRef(false)
   const targetID = target?.id
-  const name = target?.title || "Untitled session"
+  // The chip names the session in hand, or says what it does when there is
+  // none: a tab can still be picked when no session is running.
+  const name = target ? target.title || "Untitled session" : "Pick a session"
+  const label = target ? `Send to ${name}` : name
 
   // A failure belongs to the session it was about, not to the next one.
   useEffect(() => {
@@ -918,11 +921,13 @@ function Composer({
           variant="outline"
           size="xs"
           onClick={onPick}
-          disabled={!target}
+          // A tab can be picked when no session is running, so the list stays
+          // reachable as long as there are tabs to offer.
+          disabled={!target && !picks.length}
           aria-haspopup="listbox"
           aria-expanded={picking}
-          aria-label={`Send to ${name}`}
-          title={`Send to ${name}`}
+          aria-label={label}
+          title={label}
           className={cn(
             "max-w-[120px]",
             alert && "border-warning-foreground/30 bg-transparent hover:bg-warning-foreground/10",
