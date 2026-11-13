@@ -35,6 +35,9 @@ const EMPTY: IslandMessage = { sessions: [], working: 0, waiting: 0, open: false
 /** Where the length of the closed tab is kept, so it survives a restart. */
 const SHARE_KEY = "opencode-island:share"
 
+/** Where the open drawer's own size is kept, apart from the tab's share. */
+const SIZE_KEY = "opencode-island:size"
+
 type Theme = "light" | "dark" | "system"
 
 /** The appearance button cycles through the three, one click each. */
@@ -160,6 +163,10 @@ export function Island() {
   const [hoverHandle, setHoverHandle] = useState(false)
   /** The height the user asked for, as a share of the screen. Null until set. */
   const [share, setShare] = useState<number | null>(null)
+  /** True once the drawer has a size of its own, so it fills the window. */
+  const [sized, setSized] = useState(false)
+  /** The drawer edge being dragged, so the drawer fills the window as it grows. */
+  const [dragging, setDragging] = useState<"bottom" | "left" | null>(null)
   const [screen, setScreen] = useState({ width: 1920, height: 1200 })
   /** The screen size turns the kept share into a length, so nothing is sized until it is in. */
   const [ready, setReady] = useState(false)
@@ -174,13 +181,16 @@ export function Island() {
   const handle = useRef<HTMLDivElement>(null)
   const pressY = useRef<number | null>(null)
   const moved = useRef(false)
-  /** True while the bottom edge of the closed bar is being dragged. */
-  const resizing = useRef(false)
+  /** Which edge is being dragged: the closed bar's length, or the drawer's. */
+  const resizing = useRef<"bar" | "bottom" | "left" | null>(null)
   /** True just after a resize, so the release does not open the island. */
   const resized = useRef(false)
   const lastSize = useRef("")
 
   const { sessions, working, waiting, open } = state
+  // A drawer with a size of its own fills the window it was given, rather than
+  // hugging its content: the list scrolls inside it and the composer stays put.
+  const fixed = sized || dragging !== null
 
   useEffect(() => {
     window.island.onState(setState)
@@ -193,6 +203,13 @@ export function Island() {
         // The length the user set last time, so the bar does not start over.
         const saved = Number(localStorage.getItem(SHARE_KEY))
         if (saved >= 10 && saved <= 90) setShare(saved)
+        // The drawer's own size, in pixels, kept apart from that share. The
+        // window clamps it; the page only needs to know the drawer has one.
+        const kept = /^(\d+) x (\d+)$/.exec(localStorage.getItem(SIZE_KEY) ?? "")
+        if (kept) {
+          setSized(true)
+          window.island.drawerSize({ width: Number(kept[1]), height: Number(kept[2]) })
+        }
       })
       .catch(() => undefined)
       .finally(() => setReady(true))
@@ -262,25 +279,39 @@ export function Island() {
     }
   }, [])
 
-  // Dragging the bottom edge of the closed bar makes it longer or shorter.
-  // The window does the arithmetic, so the bottom edge follows the mouse.
+  // Dragging an edge makes the island bigger or smaller: the closed bar's
+  // length, or the open drawer's height or width. The window does the
+  // arithmetic, so the edge follows the mouse.
   useEffect(() => {
     const onMove = (event: MouseEvent) => {
       if (!resizing.current) return
-      window.island.resize(event.screenY)
+      window.island.resize(event.screenX, event.screenY)
     }
     const onUp = () => {
-      if (!resizing.current) return
-      resizing.current = false
+      const edge = resizing.current
+      if (!edge) return
+      resizing.current = null
       resized.current = true
       window.setTimeout(() => {
         resized.current = false
       }, 500)
-      // The window knows the length the drag asked for; keep it.
-      const next = Math.round((window.innerHeight / screen.height) * 100)
-      const clamped = Math.min(90, Math.max(10, next))
-      setShare(clamped)
-      localStorage.setItem(SHARE_KEY, String(clamped))
+      if (edge === "bar") {
+        // The window knows the length the drag asked for; keep it.
+        const next = Math.round((window.innerHeight / screen.height) * 100)
+        const clamped = Math.min(90, Math.max(10, next))
+        setShare(clamped)
+        localStorage.setItem(SHARE_KEY, String(clamped))
+      } else {
+        // The window applies the last move a frame behind the pointer, so the
+        // size is read once that frame has landed, never a frame short.
+        requestAnimationFrame(() => {
+          setDragging(null)
+          setSized(true)
+          const size = { width: window.innerWidth, height: window.innerHeight }
+          localStorage.setItem(SIZE_KEY, `${size.width} x ${size.height}`)
+          window.island.drawerSize(size)
+        })
+      }
       window.island.resizeEnd()
     }
     document.addEventListener("mousemove", onMove)
@@ -294,7 +325,7 @@ export function Island() {
   // While the bar is being resized the window tells us how long it is now.
   useEffect(() => {
     const sync = () => {
-      if (!resizing.current) return
+      if (resizing.current !== "bar") return
       const next = Math.round((window.innerHeight / screen.height) * 100)
       setShare((current) => (current === next ? current : Math.min(90, Math.max(10, next))))
     }
@@ -347,7 +378,11 @@ export function Island() {
       resized.current = false
       return
     }
-    if ((event.target as HTMLElement).closest("button, [data-row], [data-composer], [data-resize]"))
+    if (
+      (event.target as HTMLElement).closest(
+        "button, [data-row], [data-composer], [data-resize], [data-drawer-resize]",
+      )
+    )
       return
     window.island.toggle()
   }
@@ -356,8 +391,18 @@ export function Island() {
   const onResizeDown = (event: ReactMouseEvent) => {
     if (event.button !== 0) return
     event.stopPropagation()
-    resizing.current = true
+    resizing.current = "bar"
     window.island.resizeStart()
+  }
+
+  // The open drawer's bottom and left edges are its own size handles. The right
+  // edge is the screen edge, so the left one grows the drawer leftward.
+  const onDrawerDown = (event: ReactMouseEvent, edge: "bottom" | "left") => {
+    if (event.button !== 0) return
+    event.stopPropagation()
+    resizing.current = edge
+    setDragging(edge)
+    window.island.resizeStart(edge)
   }
 
   const reply = (decision: PermissionDecision) => {
@@ -413,12 +458,14 @@ export function Island() {
         alert
           ? "border-warning bg-warning text-warning-foreground"
           : "border-border bg-background text-foreground",
-        open ? "w-[420px]" : share ? "h-full w-9" : "h-[240px] w-9",
+        // A drawer with a size of its own fills the window it was given, so the
+        // list scrolls inside it and the composer stays at its foot.
+        open ? (fixed ? "h-full w-full" : "w-[420px]") : share ? "h-full w-9" : "h-[240px] w-9",
       )}
     >
       {open ? (
-        <div className="flex w-full flex-col">
-          <div className={cn("flex items-center gap-2 border-b px-4 py-2 text-xs", muted)}>
+        <div className={cn("flex w-full flex-col", fixed && "h-full min-h-0")}>
+          <div className={cn("flex shrink-0 items-center gap-2 border-b px-4 py-2 text-xs", muted)}>
             <span className={cn("font-semibold", alert ? "text-warning-foreground" : "text-foreground")}>
               {what}
             </span>
@@ -427,7 +474,14 @@ export function Island() {
             {totalCost ? <span className="tabular-nums">{money(totalCost)}</span> : null}
           </div>
 
-          <div className="max-h-[280px] overflow-y-auto py-1">
+          <div
+            className={cn(
+              "overflow-y-auto py-1",
+              // A sized drawer gives the list the room that is left, and the
+              // composer keeps its place below it.
+              fixed ? "min-h-0 flex-1" : "max-h-[280px]",
+            )}
+          >
             {rows.length ? (
               rows.map(({ session, sub }) => (
                 <Row
@@ -446,7 +500,7 @@ export function Island() {
           </div>
 
           {pending ? (
-            <div className="border-t px-4 py-3">
+            <div className="shrink-0 border-t px-4 py-3">
               <p className="mb-0.5 text-[12.5px]">{pending.action}</p>
               <p className={cn("mb-2.5 truncate font-mono text-[11.5px]", muted)}>
                 {pending.resources.join("   ") || pending.message || ""}
@@ -470,6 +524,7 @@ export function Island() {
             picks={picks}
             alert={alert}
             picking={picking}
+            fixed={fixed}
             onPick={() => setPicking((open) => !open)}
             onChoose={(id) => {
               setPicked(id)
@@ -477,7 +532,7 @@ export function Island() {
             }}
           />
 
-          <div className="flex items-center gap-1 border-t px-2 py-1.5">
+          <div className="flex shrink-0 items-center gap-1 border-t px-2 py-1.5">
             <Button
               variant="outline"
               size="icon-sm"
@@ -631,6 +686,25 @@ export function Island() {
         </div>
       )}
 
+      {/* The open drawer has a grip on its bottom edge and on its left edge.
+          The right edge is the screen edge, so the left one grows it leftward. */}
+      {open ? (
+        <>
+          <div
+            data-drawer-resize="bottom"
+            onMouseDown={(event) => onDrawerDown(event, "bottom")}
+            title="Drag to change the height"
+            className="absolute inset-x-0 bottom-0 h-1.5 cursor-ns-resize hover:bg-accent/60"
+          />
+          <div
+            data-drawer-resize="left"
+            onMouseDown={(event) => onDrawerDown(event, "left")}
+            title="Drag to change the width"
+            className="absolute inset-y-0 left-0 w-1.5 cursor-ew-resize hover:bg-accent/60"
+          />
+        </>
+      ) : null}
+
       {open ? null : (
         <div
           data-resize
@@ -753,10 +827,13 @@ type Queue =
 function Picker({
   picks,
   target,
+  fixed,
   onChoose,
 }: {
   picks: SessionPicks
   target: string | undefined
+  /** The drawer has a size of its own, so the list must fit inside it. */
+  fixed: boolean
   onChoose: (id: string) => void
 }) {
   return (
@@ -771,7 +848,12 @@ function Picker({
         const at = options.indexOf(document.activeElement as HTMLElement)
         options[at + (event.key === "ArrowDown" ? 1 : -1)]?.focus()
       }}
-      className="mb-1.5 max-h-[168px] overflow-y-auto rounded-md border bg-background p-1 text-foreground"
+      className={cn(
+        "mb-1.5 overflow-y-auto rounded-md border bg-background p-1 text-foreground",
+        // A fixed drawer cannot grow to fit the list, so it takes only what is
+        // left above the composer's field.
+        fixed ? "max-h-[min(168px,calc(100vh-140px))]" : "max-h-[168px]",
+      )}
     >
       {picks.length ? (
         // The options are the listbox's own children, as ARIA requires.
@@ -824,6 +906,7 @@ function Composer({
   picks,
   alert,
   picking,
+  fixed,
   onPick,
   onChoose,
 }: {
@@ -831,6 +914,7 @@ function Composer({
   picks: SessionPicks
   alert: boolean
   picking: boolean
+  fixed: boolean
   onPick: () => void
   onChoose: (id: string) => void
 }) {
@@ -911,10 +995,10 @@ function Composer({
   }
 
   return (
-    <div data-composer className="border-t px-3 py-2">
+    <div data-composer className="shrink-0 border-t px-3 py-2">
       {/* The tabs open in OpenCode, above the chip: the composer keeps its
           place at the foot of the drawer whatever the list holds. */}
-      {picking ? <Picker picks={picks} target={target?.id} onChoose={onChoose} /> : null}
+      {picking ? <Picker picks={picks} target={target?.id} fixed={fixed} onChoose={onChoose} /> : null}
 
       <div className="flex items-center gap-1.5">
         <Button

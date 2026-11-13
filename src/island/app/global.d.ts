@@ -17,8 +17,8 @@ declare global {
       dragStart: () => void
       dragEnd: () => void
       ignore: (ignore: boolean) => void
-      resizeStart: () => void
-      resize: (screenY: number) => void
+      resizeStart: (edge?: "bottom" | "left") => void
+      resize: (screenX: number, screenY: number) => void
       resizeEnd: () => void
       drawerSize: (size: { width: number; height: number }) => void
       openApp: () => void

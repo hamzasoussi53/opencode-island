@@ -614,4 +614,11 @@ assert.match(islandSource, /picks\.find\(/)
 assert.match(islandSource, /disabled=\{!target && !picks\.length\}/)
 assert.match(islandSource, /"Pick a session"/)
 
+// The open drawer keeps its own size, apart from the bar's share of the screen,
+// and draws a grip on the bottom edge and on the left edge to change it.
+assert.match(islandSource, /opencode-island:size/)
+assert.match(islandSource, /drawerSize/)
+assert.match(islandSource, /data-drawer-resize="bottom"/)
+assert.match(islandSource, /data-drawer-resize="left"/)
+
 console.log("ok")

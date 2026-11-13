@@ -133,9 +133,10 @@ export function createIslandWindow(options: IslandWindowOptions) {
   let open = false
   // Where the tab's centre sits on the right edge; null means "middle".
   let center: number | null = null
-  // While the bar is being resized its top stays put, so the bottom follows
-  // the mouse instead of drifting away from it.
-  let anchorTop: number | null = null
+  // While an edge is dragged its opposite edge holds still: the bottom edge of
+  // the bar or of the drawer, whose top stays put, or the drawer's left edge,
+  // whose right edge is the screen edge.
+  let resize: { edge: "bottom" | "left"; top: number; right: number } | null = null
 
   const place = (animate = false) => {
     if (window.isDestroyed()) return
@@ -143,8 +144,8 @@ export function createIslandWindow(options: IslandWindowOptions) {
     const box = open ? (drawer ?? content ?? size) : size
     const middle = area.y + (area.height - box.height) / 2
     const y =
-      anchorTop != null
-        ? Math.min(area.y + area.height - box.height, Math.max(area.y, anchorTop))
+      resize?.edge === "bottom"
+        ? Math.min(area.y + area.height - box.height, Math.max(area.y, resize.top))
         : center == null
           ? middle
           : Math.min(area.y + area.height - box.height, Math.max(area.y, center - box.height / 2))
@@ -248,26 +249,55 @@ export function createIslandWindow(options: IslandWindowOptions) {
     if (ours(event.sender)) window.setIgnoreMouseEvents(Boolean(ignore), { forward: true })
   }
 
-  // The bar is resized from its bottom edge: hold the top still and let the
-  // bottom follow the mouse.
-  const onResizeStart = (event: Electron.IpcMainEvent) => {
+  // An edge is dragged from its grip: the bar's bottom edge, or the drawer's
+  // bottom or left edge. The window does the arithmetic, so the edge follows
+  // the mouse exactly.
+  const onResizeStart = (event: Electron.IpcMainEvent, edge: "bottom" | "left" | undefined) => {
     if (!ours(event.sender)) return
-    anchorTop = window.getBounds().y
+    const bounds = window.getBounds()
+    resize = {
+      edge: edge === "left" ? "left" : "bottom",
+      top: bounds.y,
+      right: bounds.x + bounds.width,
+    }
   }
 
-  const onResize = (event: Electron.IpcMainEvent, screenY: number) => {
-    if (!ours(event.sender) || anchorTop == null) return
+  const onResize = (event: Electron.IpcMainEvent, at: { x?: number; y?: number }) => {
+    if (!ours(event.sender) || !resize) return
     const area = screen.getPrimaryDisplay().workArea
-    const height = Math.min(area.height, Math.max(24, Math.round(screenY - anchorTop)))
-    if (height === size.height) return
-    size = { ...size, height }
+    const box = open ? (drawer ?? content ?? size) : size
+    if (resize.edge === "left") {
+      // The right edge is the screen edge and never moves, so the drawer grows
+      // leftward from it.
+      const width = Math.min(
+        MAX_WIDTH,
+        area.width,
+        Math.max(MIN_DRAWER_WIDTH, Math.round(resize.right - (at?.x ?? 0))),
+      )
+      if (width === box.width) return
+      drawer = { width, height: box.height }
+      place(false)
+      return
+    }
+    const min = open ? MIN_DRAWER_HEIGHT : 24
+    const max = open ? Math.round(area.height * DRAWER_HEIGHT_SHARE) : area.height
+    const height = Math.min(max, Math.max(min, Math.round((at?.y ?? 0) - resize.top)))
+    if (height === box.height) return
+    // A report while the drawer is open belongs to the drawer, never to the bar.
+    if (open) drawer = { width: box.width, height }
+    else size = { ...size, height }
     place(false)
   }
 
   const onResizeEnd = (event: Electron.IpcMainEvent) => {
     if (!ours(event.sender)) return
-    if (anchorTop != null) center = anchorTop + size.height / 2
-    anchorTop = null
+    // A dragged bottom edge holds the top still, so the island's centre moves to
+    // the new centre and the island stays where it was put.
+    if (resize?.edge === "bottom") {
+      const box = open ? (drawer ?? content ?? size) : size
+      center = resize.top + box.height / 2
+    }
+    resize = null
   }
 
   // The drawer's size is in pixels, so it is clamped against the screen rather
@@ -278,7 +308,11 @@ export function createIslandWindow(options: IslandWindowOptions) {
   ) => {
     if (!ours(event.sender)) return
     const area = screen.getPrimaryDisplay().workArea
-    const width = Math.min(MAX_WIDTH, Math.max(MIN_DRAWER_WIDTH, Math.round(next?.width ?? 0)))
+    const width = Math.min(
+      MAX_WIDTH,
+      area.width,
+      Math.max(MIN_DRAWER_WIDTH, Math.round(next?.width ?? 0)),
+    )
     const height = Math.min(
       Math.round(area.height * DRAWER_HEIGHT_SHARE),
       Math.max(MIN_DRAWER_HEIGHT, Math.round(next?.height ?? 0)),
