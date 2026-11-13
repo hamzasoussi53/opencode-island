@@ -301,48 +301,43 @@ is not the send action.
 - The dropdown lists every session, running and finished, so a finished session
   can be picked and prompted.
 
-## Open questions for the human partner
+## Decisions taken from the builder's review
 
-These came out of the builder's review of this document. The first is a change
-to what was agreed, and it needs an answer; the rest are decisions that are
-theirs to make.
+These were open when the document was first written. They are settled here, and
+the plan follows them.
 
-**1. The keyboard goes back to the app after a send, and the drawer closes.**
-This is a correction to the agreed shape, where the island kept focus and the
-row updated in place. Keeping the focus is not safe: the user's next
-keystrokes would land in the island's empty field, and a stray Enter would
-send a second prompt to the same session. Giving the keyboard back means the
-drawer's existing close-on-blur rule closes it, so the row is no longer on
-screen. The bar keeps showing that session's words, so the agent picking the
-prompt up is still visible.
+**The keyboard goes back to the app after a send, and the drawer closes.** The
+agreed shape had the island keeping focus and the row updating in place, but
+keeping the focus is not safe: the user's next keystrokes would land in the
+island's empty field, and a stray Enter would send a second prompt to the
+same session. Giving the keyboard back lets the drawer's existing
+close-on-blur rule close it. The bar keeps showing that session's words, so
+the agent picking the prompt up is still visible. A session waiting on a
+permission keeps the drawer open, as it does today.
 
-The alternative is to change the close-on-blur rule, so the drawer stays open
-when the island gives the keyboard back, and closes only when the user clicks
-away on purpose. That keeps the row on screen but changes when the island
-disappears, which is a thing people notice.
+**The drawer's height stays the content's height until it is dragged.** The
+drawer is 110 to 350 pixels tall today, with the session list scrolling
+inside it. A fixed 240 would be shorter than today with four sessions
+running, and would add a scrollbar the island does not have now. So the
+content decides the height, and a dragged height is remembered and used from
+then on.
 
-**2. The drawer's height.** Its height today is the content's height, about
-110 to 350 pixels, and the session list scrolls inside it. The plan was for it
-to become a fixed 240, which would make it shorter than it is today with four
-sessions running and add a scrollbar. The plan is now to keep the
-content-driven height as the default, and only fix the height once the bottom
-edge is dragged. Is that what you want, or would you rather the drawer open at
-a fixed size?
+**The drawer is centred on the island's vertical centre, as it is today.**
+Dragging its bottom edge holds the top still, grows the drawer downward, and
+on release moves the island's centre to the drawer's new centre, so the island
+stays where it was put. The right edge is the screen edge and never moves, so
+dragging the left edge grows the drawer leftward.
 
-**3. The drawer is centred on the island's vertical centre, as it is today.**
-Dragging its bottom edge grows it downward and moves the island's centre to
-match. The alternative is that the drawer hangs from the island's top edge and
-grows down from there, which keeps the island's centre fixed and means the
-drawer's top never moves.
+**Cancelling a queued prompt cancels one at a time**, the newest first, each
+offered in the queue menu with the text it carries.
 
-**4. Cancelling a queued prompt cancels one at a time**, the newest first, as
-each is offered in the queue menu. The alternative is one button that cancels
-all of them.
-
-**5. The session list is a scrolling list, not a search box.** With two
-hundred sessions, scrolling is a lot of clicking to reach one from a week ago.
-A search field costs a little room in the drawer but finds one in two
-keystrokes.
+**The session list is a scrolling list, with running sessions first.** It
+opens as a list of the running sessions, then the finished ones newest first,
+each showing its title, its agent and the last segment of its project path.
+The running ones are marked, so a finished session is never confused with a
+live one. There is no search box: the list is there to pick a session you are
+already looking at, and a filter field would take the room the composer
+needs.
 
 ## Left to the builder
 
