@@ -621,4 +621,19 @@ assert.match(islandSource, /drawerSize/)
 assert.match(islandSource, /data-drawer-resize="bottom"/)
 assert.match(islandSource, /data-drawer-resize="left"/)
 
+// The drawer stays open by default, and the toggle turns the old behaviour
+// back on.
+assert.match(islandSource, /opencode-island:auto-close/)
+assert.match(islandSource, /autoClose/)
+
+// The main half only closes the drawer on blur when the island says so.
+assert.match(guiSource, /if \(autoClose !== "close"\) return/)
+
+// Escape closes the drawer, so it is never stuck open.
+assert.match(windowSource, /input\.key !== "Escape"/)
+
+// The bridge carries the mode in both directions.
+assert.match(preloadSource, /autoClose: \(mode\) =>/)
+assert.match(preloadSource, /onAutoClose: \(handler\) =>/)
+
 console.log("ok")

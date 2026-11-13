@@ -13,10 +13,13 @@ import {
   Monitor,
   Moon,
   Power,
+  PushPin,
   Sun,
+  Timer,
 } from "@phosphor-icons/react"
 import { ThinkingOrb } from "thinking-orbs"
 import type {
+  AutoClose,
   IslandMessage,
   PermissionDecision,
   PlanStep,
@@ -37,6 +40,9 @@ const SHARE_KEY = "opencode-island:share"
 
 /** Where the open drawer's own size is kept, apart from the tab's share. */
 const SIZE_KEY = "opencode-island:size"
+
+/** Where the drawer's auto-close setting is kept. */
+const AUTO_CLOSE_KEY = "opencode-island:auto-close"
 
 type Theme = "light" | "dark" | "system"
 
@@ -167,6 +173,8 @@ export function Island() {
   const [sized, setSized] = useState(false)
   /** The drawer edge being dragged, so the drawer fills the window as it grows. */
   const [dragging, setDragging] = useState<"bottom" | "left" | null>(null)
+  /** Whether the drawer closes when the app takes the focus back. */
+  const [autoClose, setAutoClose] = useState<AutoClose>("stay")
   const [screen, setScreen] = useState({ width: 1920, height: 1200 })
   /** The screen size turns the kept share into a length, so nothing is sized until it is in. */
   const [ready, setReady] = useState(false)
@@ -210,6 +218,13 @@ export function Island() {
           setSized(true)
           window.island.drawerSize({ width: Number(kept[1]), height: Number(kept[2]) })
         }
+        // Whether the drawer closes when the app takes the focus back. It stays
+        // open unless the user asked for the old behaviour, and the main half
+        // is told which, so its blur rule follows.
+        const closing = localStorage.getItem(AUTO_CLOSE_KEY)
+        const mode: AutoClose = closing === "close" ? "close" : "stay"
+        setAutoClose(mode)
+        window.island.autoClose(mode)
       })
       .catch(() => undefined)
       .finally(() => setReady(true))
@@ -405,6 +420,14 @@ export function Island() {
     window.island.resizeStart(edge)
   }
 
+  // The drawer stays open until it is closed. The toggle turns the old
+  // behaviour back on, and the setting is kept for the next time.
+  const setAutoCloseMode = (mode: AutoClose) => {
+    setAutoClose(mode)
+    localStorage.setItem(AUTO_CLOSE_KEY, mode)
+    window.island.autoClose(mode)
+  }
+
   const reply = (decision: PermissionDecision) => {
     const pending = sessions.find((session) => session.permission)?.permission
     if (pending) window.island.reply({ sessionID: pending.sessionID, requestID: pending.id, decision })
@@ -587,6 +610,19 @@ export function Island() {
               className={cn(alert && "border-warning-foreground/30 bg-transparent hover:bg-warning-foreground/10")}
             >
               <CursorClick weight="duotone" />
+            </Toggle>
+            {/* Whether the drawer closes when the app takes the focus back.
+                It stays open unless the user asks for the old behaviour. */}
+            <Toggle
+              size="sm"
+              variant="outline"
+              pressed={autoClose === "close"}
+              onPressedChange={(pressed) => setAutoCloseMode(pressed ? "close" : "stay")}
+              aria-label={autoClose === "close" ? "Auto-close" : "Stay open"}
+              title={autoClose === "close" ? "Auto-close" : "Stay open"}
+              className={cn(alert && "border-warning-foreground/30 bg-transparent hover:bg-warning-foreground/10")}
+            >
+              {autoClose === "close" ? <Timer weight="duotone" /> : <PushPin weight="duotone" />}
             </Toggle>
             <Toggle
               size="sm"

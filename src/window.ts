@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import islandHtml from "../dist/island/index.html?raw"
 import islandPreload from "./island/preload.cjs?raw"
-import type { IslandMessage, PermissionDecision, QueuedPrompt, SessionPicks } from "./state"
+import type { AutoClose, IslandMessage, PermissionDecision, QueuedPrompt, SessionPicks } from "./state"
 
 /**
  * The only file that touches raw Electron.
@@ -54,6 +54,10 @@ export interface IslandWindowOptions {
   onCancel: (request: { sessionID: string; inboxID: string }) => void
   /** The drawer was resized, so its size is known for the next open. */
   onDrawerSize: (size: { width: number; height: number }) => void
+  /** The drawer now closes when the app takes the focus back, or it does not. */
+  onAutoClose: (mode: AutoClose) => void
+  /** Close the drawer, the way Escape does. */
+  onClose: () => void
   /** Bring the OpenCode window to the front. */
   onOpenApp: () => void
   /** Close the island and OpenCode with it. */
@@ -328,6 +332,14 @@ export function createIslandWindow(options: IslandWindowOptions) {
     return { width: area.width, height: area.height }
   }
 
+  // The drawer no longer closes on blur, so it needs a way to close that does
+  // not depend on the island having the focus: Escape closes it.
+  const onBeforeInput = (event: Electron.Event, input: Electron.Input) => {
+    if (input.type !== "keyDown" || input.key !== "Escape") return
+    event.preventDefault()
+    options.onClose()
+  }
+
   // Bring the OpenCode window forward, so the user can go back to it.
   const onOpenApp = (event: Electron.IpcMainEvent) => {
     if (!ours(event.sender)) return
@@ -338,6 +350,13 @@ export function createIslandWindow(options: IslandWindowOptions) {
   const onQuit = (event: Electron.IpcMainEvent) => {
     if (!ours(event.sender)) return
     options.onQuit()
+  }
+
+  // The page says whether the drawer closes when the app takes the focus
+  // back. The main half owns that rule, so the mode is handed over.
+  const onAutoClose = (event: Electron.IpcMainEvent, mode: AutoClose) => {
+    if (!ours(event.sender)) return
+    options.onAutoClose(mode === "close" ? "close" : "stay")
   }
 
   ipcMain.on(`${CHANNEL}:ready`, onReady)
@@ -352,6 +371,7 @@ export function createIslandWindow(options: IslandWindowOptions) {
   ipcMain.on(`${CHANNEL}:resize`, onResize)
   ipcMain.on(`${CHANNEL}:resize-end`, onResizeEnd)
   ipcMain.on(`${CHANNEL}:drawer-size`, onDrawerSize)
+  ipcMain.on(`${CHANNEL}:auto-close`, onAutoClose)
   ipcMain.on(`${CHANNEL}:open-app`, onOpenApp)
   ipcMain.on(`${CHANNEL}:quit`, onQuit)
   ipcMain.handle(`${CHANNEL}:screen`, onScreen)
@@ -359,6 +379,7 @@ export function createIslandWindow(options: IslandWindowOptions) {
   ipcMain.handle(`${CHANNEL}:queued`, onQueued)
 
   window.on("blur", () => options.onBlur())
+  window.webContents.on("before-input-event", onBeforeInput)
   window.on("closed", () => {
     stopDrag()
     options.log("debug", "island window closed")
@@ -408,6 +429,7 @@ export function createIslandWindow(options: IslandWindowOptions) {
       ipcMain.removeListener(`${CHANNEL}:resize`, onResize)
       ipcMain.removeListener(`${CHANNEL}:resize-end`, onResizeEnd)
       ipcMain.removeListener(`${CHANNEL}:drawer-size`, onDrawerSize)
+    ipcMain.removeListener(`${CHANNEL}:auto-close`, onAutoClose)
       ipcMain.removeListener(`${CHANNEL}:open-app`, onOpenApp)
       ipcMain.removeListener(`${CHANNEL}:quit`, onQuit)
       ipcMain.removeHandler(`${CHANNEL}:screen`)

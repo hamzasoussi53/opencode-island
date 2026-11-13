@@ -20,10 +20,13 @@ contextBridge.exposeInMainWorld("island", {
   resize: (screenX, screenY) => ipcRenderer.send("opencode-island:resize", { x: screenX, y: screenY }),
   resizeEnd: () => ipcRenderer.send("opencode-island:resize-end"),
   drawerSize: (size) => ipcRenderer.send("opencode-island:drawer-size", size),
+  autoClose: (mode) => ipcRenderer.send("opencode-island:auto-close", mode),
   openApp: () => ipcRenderer.send("opencode-island:open-app"),
   quit: () => ipcRenderer.send("opencode-island:quit"),
   screen: () => ipcRenderer.invoke("opencode-island:screen"),
   onState: (handler) => ipcRenderer.on("opencode-island:state", (_event, state) => handler(state)),
   onPicks: (handler) =>
     ipcRenderer.on("opencode-island:picks", (_event, picks) => handler(picks)),
+  onAutoClose: (handler) =>
+    ipcRenderer.on("opencode-island:auto-close", (_event, mode) => handler(mode)),
 })

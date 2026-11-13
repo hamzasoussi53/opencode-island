@@ -1,4 +1,10 @@
-import type { IslandMessage, PermissionDecision, QueuedPrompt, SessionPicks } from "../../state"
+import type {
+  AutoClose,
+  IslandMessage,
+  PermissionDecision,
+  QueuedPrompt,
+  SessionPicks,
+} from "../../state"
 
 declare global {
   interface Window {
@@ -21,11 +27,13 @@ declare global {
       resize: (screenX: number, screenY: number) => void
       resizeEnd: () => void
       drawerSize: (size: { width: number; height: number }) => void
+      autoClose: (mode: AutoClose) => void
       openApp: () => void
       quit: () => void
       screen: () => Promise<{ width: number; height: number }>
       onState: (handler: (state: IslandMessage) => void) => void
       onPicks: (handler: (picks: SessionPicks) => void) => void
+      onAutoClose: (handler: (mode: AutoClose) => void) => void
     }
   }
 }

@@ -12,6 +12,9 @@ export type SessionPhase = "idle" | "thinking" | "writing" | "working" | "waitin
 
 export type PermissionDecision = "once" | "always" | "reject"
 
+/** Whether the open drawer closes when the app takes the focus back. */
+export type AutoClose = "close" | "stay"
+
 /** Where a step of the plan stands. */
 export type PlanState = "waiting" | "working" | "done" | "failed"
 

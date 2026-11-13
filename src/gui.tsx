@@ -4,7 +4,7 @@ import { app } from "electron"
 import { createModel } from "./model"
 import { islandShouldExist } from "./lifecycle"
 import { createIslandWindow } from "./window"
-import type { IslandMessage, IslandState } from "./state"
+import type { AutoClose, IslandMessage, IslandState } from "./state"
 
 /**
  * The island lives in the desktop app's main process, not in a window.
@@ -20,6 +20,9 @@ export default Plugin.define({
   main(ctx) {
     let state: IslandState = { sessions: [], working: 0, waiting: 0 }
     let open = false
+    // Whether the drawer closes when the app takes the focus back. The island
+    // owns the setting; it says which, and this half follows.
+    let autoClose: AutoClose = "stay"
     let lastWaiting = 0
     let model: ReturnType<typeof createModel> | undefined
     let controller: AbortController | undefined
@@ -56,9 +59,20 @@ export default Plugin.define({
         },
         onBlur: () => {
           if (!open) return
+          // The drawer stays open until it is closed, so it is the island's
+          // setting that says whether losing the focus is a way to close it.
+          if (autoClose !== "close") return
           // An island that is asking for an answer stays up: the window never
           // has focus, so the app taking focus back would close it mid-question.
           if (state.sessions.some((session) => session.permission)) return
+          open = false
+          send()
+        },
+        onAutoClose: (mode) => {
+          autoClose = mode
+        },
+        onClose: () => {
+          if (!open) return
           open = false
           send()
         },
