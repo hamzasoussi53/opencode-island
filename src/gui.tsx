@@ -29,11 +29,26 @@ export default Plugin.define({
     const message = (): IslandMessage => ({ ...state, open })
     const send = () => island?.send(message())
 
+    // The picks go on their own channel, and only when they change: the state
+    // is published on every token of every answer.
+    let picksSent = ""
+    const sendPicks = () => {
+      if (!island || !model) return
+      const picks = model.picks()
+      const key = JSON.stringify(picks)
+      if (key === picksSent) return
+      picksSent = key
+      island.picks(picks)
+    }
+
     const create = () => {
       if (island) return
       island = createIslandWindow({
         log: (level, text, data) => ctx.log.write(level, text, data),
-        onReady: () => send(),
+        onReady: () => {
+          send()
+          sendPicks()
+        },
         onToggle: () => {
           open = !open
           send()
@@ -52,6 +67,21 @@ export default Plugin.define({
           void model?.reply(reply).catch((error: unknown) => {
             ctx.log.write("warn", "island permission reply failed", { error: String(error) })
           })
+        },
+        onPrompt: (request) =>
+          model
+            ? model.prompt(request.sessionID, request.text, request.delivery)
+            : Promise.resolve({ ok: false, error: "OpenCode is not connected" }),
+        onQueued: (sessionID) =>
+          model ? model.queued(sessionID) : Promise.reject(new Error("OpenCode is not connected")),
+        onCancel: (request) => {
+          void model?.cancel(request.sessionID, request.inboxID).then((answer) => {
+            if (answer.ok) return
+            ctx.log.write("warn", "island prompt cancel failed", { error: answer.error })
+          })
+        },
+        onDrawerSize: (size) => {
+          ctx.log.write("debug", "island drawer resized", size)
         },
         onOpenApp: () => {
           // The island floats above everything and never takes focus, so this is
@@ -75,6 +105,8 @@ export default Plugin.define({
     const destroy = () => {
       island?.dispose()
       island = undefined
+      // A fresh page has not been sent the picks yet.
+      picksSent = ""
     }
 
     // The app's own windows, counted so the island can follow them.
@@ -112,6 +144,7 @@ export default Plugin.define({
           lastWaiting = next.waiting
           state = next
           send()
+          sendPicks()
         },
       )
       model.start(controller.signal)

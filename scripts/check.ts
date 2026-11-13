@@ -514,4 +514,18 @@ assert.equal(islandShouldExist(0), false)
 assert.equal(islandShouldExist(1), true)
 assert.equal(islandShouldExist(3), true)
 
+// The island's page can ask for a prompt to be sent, and for the queue.
+const preloadSource = readFileSync(new URL("../src/island/preload.cjs", import.meta.url), "utf8")
+assert.match(preloadSource, /prompt: \(request\) =>/)
+assert.match(preloadSource, /queued: \(sessionID\) =>/)
+assert.match(preloadSource, /cancel: \(request\) =>/)
+assert.match(preloadSource, /onPicks: \(handler\) =>/)
+assert.match(preloadSource, /drawerSize: \(size\) =>/)
+
+// The window answers a prompt and a queue, and carries the drawer's size.
+assert.match(windowSource, /\$\{CHANNEL\}:prompt/)
+assert.match(windowSource, /\$\{CHANNEL\}:queued/)
+assert.match(windowSource, /\$\{CHANNEL\}:cancel/)
+assert.match(windowSource, /\$\{CHANNEL\}:drawer-size/)
+
 console.log("ok")

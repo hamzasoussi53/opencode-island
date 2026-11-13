@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import islandHtml from "../dist/island/index.html?raw"
 import islandPreload from "./island/preload.cjs?raw"
-import type { IslandMessage, PermissionDecision } from "./state"
+import type { IslandMessage, PermissionDecision, QueuedPrompt, SessionPicks } from "./state"
 
 /**
  * The only file that touches raw Electron.
@@ -22,11 +22,22 @@ import type { IslandMessage, PermissionDecision } from "./state"
 const CHANNEL = "opencode-island"
 const MIN_WIDTH = 24
 const MAX_WIDTH = 640
+// The open drawer is a panel of a fixed size, so it is clamped in pixels; its
+// ceiling is the same as the bar's width, and its height a share of the screen.
+const MIN_DRAWER_WIDTH = 320
+const MIN_DRAWER_HEIGHT = 240
+const DRAWER_HEIGHT_SHARE = 0.8
 
 export interface Reply extends Record<string, unknown> {
   sessionID: string
   requestID: string
   decision: PermissionDecision
+}
+
+export interface PromptRequest {
+  sessionID: string
+  text: string
+  delivery: "steer" | "queue"
 }
 
 export interface IslandWindowOptions {
@@ -36,6 +47,13 @@ export interface IslandWindowOptions {
   /** The island lost focus, so it should contract. */
   onBlur: () => void
   onReply: (reply: Reply) => void
+  /** Send a prompt to a session; the answer says whether it went. */
+  onPrompt: (request: PromptRequest) => Promise<{ ok: boolean; error?: string }>
+  /** What the server has queued for a session. */
+  onQueued: (sessionID: string) => Promise<QueuedPrompt[]>
+  onCancel: (request: { sessionID: string; inboxID: string }) => void
+  /** The drawer was resized, so its size is known for the next open. */
+  onDrawerSize: (size: { width: number; height: number }) => void
   /** Bring the OpenCode window to the front. */
   onOpenApp: () => void
   /** Close the island and OpenCode with it. */
@@ -106,6 +124,11 @@ export function createIslandWindow(options: IslandWindowOptions) {
   }
 
   let size = { width: 460, height: 240 }
+  // The open drawer's own size in pixels; null until it has been dragged, when
+  // the drawer is as tall as its content and the page reports that instead.
+  let drawer: { width: number; height: number } | null = null
+  // Whether the island is showing its drawer, which decides which size applies.
+  let open = false
   // Where the tab's centre sits on the right edge; null means "middle".
   let center: number | null = null
   // While the bar is being resized its top stays put, so the bottom follows
@@ -115,19 +138,20 @@ export function createIslandWindow(options: IslandWindowOptions) {
   const place = (animate = false) => {
     if (window.isDestroyed()) return
     const area = screen.getPrimaryDisplay().workArea
-    const middle = area.y + (area.height - size.height) / 2
+    const box = open && drawer ? drawer : size
+    const middle = area.y + (area.height - box.height) / 2
     const y =
       anchorTop != null
-        ? Math.min(area.y + area.height - size.height, Math.max(area.y, anchorTop))
+        ? Math.min(area.y + area.height - box.height, Math.max(area.y, anchorTop))
         : center == null
           ? middle
-          : Math.min(area.y + area.height - size.height, Math.max(area.y, center - size.height / 2))
+          : Math.min(area.y + area.height - box.height, Math.max(area.y, center - box.height / 2))
     window.setBounds(
       {
-        x: Math.round(area.x + area.width - size.width),
+        x: Math.round(area.x + area.width - box.width),
         y: Math.round(y),
-        width: size.width,
-        height: size.height,
+        width: box.width,
+        height: box.height,
       },
       animate,
     )
@@ -141,6 +165,9 @@ export function createIslandWindow(options: IslandWindowOptions) {
 
   const onSize = (event: Electron.IpcMainEvent, next: { width?: number; height?: number }) => {
     if (!ours(event.sender)) return
+    // Once the drawer has been dragged its own size is in charge while it is
+    // open, so a content report must not take it back.
+    if (open && drawer) return
     const area = screen.getPrimaryDisplay().workArea
     const width = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Math.round(next?.width ?? 0)))
     // The page may ask for a share of the screen, so the ceiling is the screen.
@@ -162,6 +189,28 @@ export function createIslandWindow(options: IslandWindowOptions) {
 
   const onReply = (event: Electron.IpcMainEvent, reply: Reply) => {
     if (ours(event.sender)) options.onReply(reply)
+  }
+
+  // The island shows a failed send where the user is, so the answer goes back
+  // as a value rather than as a rejected request.
+  const onPrompt = (_event: Electron.IpcMainInvokeEvent, request: PromptRequest) =>
+    options.onPrompt(request)
+
+  // A queue that cannot be read fails the request, so the island can say so:
+  // an empty list would claim the queue is empty.
+  const onQueued = async (_event: Electron.IpcMainInvokeEvent, sessionID: string) => {
+    try {
+      return await options.onQueued(sessionID)
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  const onCancel = (
+    event: Electron.IpcMainEvent,
+    request: { sessionID: string; inboxID: string },
+  ) => {
+    if (ours(event.sender)) options.onCancel(request)
   }
 
   // Dragging the closed tab slides it along the edge: the window follows the
@@ -219,6 +268,24 @@ export function createIslandWindow(options: IslandWindowOptions) {
     anchorTop = null
   }
 
+  // The drawer's size is in pixels, so it is clamped against the screen rather
+  // than turned into a share of it.
+  const onDrawerSize = (
+    event: Electron.IpcMainEvent,
+    next: { width?: number; height?: number },
+  ) => {
+    if (!ours(event.sender)) return
+    const area = screen.getPrimaryDisplay().workArea
+    const width = Math.min(MAX_WIDTH, Math.max(MIN_DRAWER_WIDTH, Math.round(next?.width ?? 0)))
+    const height = Math.min(
+      Math.round(area.height * DRAWER_HEIGHT_SHARE),
+      Math.max(MIN_DRAWER_HEIGHT, Math.round(next?.height ?? 0)),
+    )
+    drawer = { width, height }
+    options.onDrawerSize(drawer)
+    if (open) place()
+  }
+
   // The page sizes itself against the screen, so it needs to know how big it is.
   const onScreen = () => {
     const area = screen.getPrimaryDisplay().workArea
@@ -241,15 +308,19 @@ export function createIslandWindow(options: IslandWindowOptions) {
   ipcMain.on(`${CHANNEL}:size`, onSize)
   ipcMain.on(`${CHANNEL}:toggle`, onToggle)
   ipcMain.on(`${CHANNEL}:reply`, onReply)
+  ipcMain.on(`${CHANNEL}:cancel`, onCancel)
   ipcMain.on(`${CHANNEL}:drag-start`, onDragStart)
   ipcMain.on(`${CHANNEL}:drag-end`, onDragEnd)
   ipcMain.on(`${CHANNEL}:ignore`, onIgnore)
   ipcMain.on(`${CHANNEL}:resize-start`, onResizeStart)
   ipcMain.on(`${CHANNEL}:resize`, onResize)
   ipcMain.on(`${CHANNEL}:resize-end`, onResizeEnd)
+  ipcMain.on(`${CHANNEL}:drawer-size`, onDrawerSize)
   ipcMain.on(`${CHANNEL}:open-app`, onOpenApp)
   ipcMain.on(`${CHANNEL}:quit`, onQuit)
   ipcMain.handle(`${CHANNEL}:screen`, onScreen)
+  ipcMain.handle(`${CHANNEL}:prompt`, onPrompt)
+  ipcMain.handle(`${CHANNEL}:queued`, onQueued)
 
   window.on("blur", () => options.onBlur())
   window.on("closed", () => {
@@ -274,22 +345,36 @@ export function createIslandWindow(options: IslandWindowOptions) {
     id: window.id,
     send(message: IslandMessage) {
       if (window.isDestroyed()) return
+      if (message.open !== open) {
+        open = message.open
+        // Which size applies is decided here, when the island opens or closes.
+        if (drawer) place()
+      }
       window.webContents.send(`${CHANNEL}:state`, message)
+    },
+    /** The sessions the island can pick from, on their own channel. */
+    picks(list: SessionPicks) {
+      if (window.isDestroyed()) return
+      window.webContents.send(`${CHANNEL}:picks`, list)
     },
     dispose() {
       ipcMain.removeListener(`${CHANNEL}:ready`, onReady)
       ipcMain.removeListener(`${CHANNEL}:size`, onSize)
       ipcMain.removeListener(`${CHANNEL}:toggle`, onToggle)
       ipcMain.removeListener(`${CHANNEL}:reply`, onReply)
+      ipcMain.removeListener(`${CHANNEL}:cancel`, onCancel)
       ipcMain.removeListener(`${CHANNEL}:drag-start`, onDragStart)
       ipcMain.removeListener(`${CHANNEL}:drag-end`, onDragEnd)
       ipcMain.removeListener(`${CHANNEL}:ignore`, onIgnore)
       ipcMain.removeListener(`${CHANNEL}:resize-start`, onResizeStart)
       ipcMain.removeListener(`${CHANNEL}:resize`, onResize)
       ipcMain.removeListener(`${CHANNEL}:resize-end`, onResizeEnd)
+      ipcMain.removeListener(`${CHANNEL}:drawer-size`, onDrawerSize)
       ipcMain.removeListener(`${CHANNEL}:open-app`, onOpenApp)
       ipcMain.removeListener(`${CHANNEL}:quit`, onQuit)
       ipcMain.removeHandler(`${CHANNEL}:screen`)
+      ipcMain.removeHandler(`${CHANNEL}:prompt`)
+      ipcMain.removeHandler(`${CHANNEL}:queued`)
       screen.removeListener("display-metrics-changed", onDisplaysChanged)
       screen.removeListener("display-added", onDisplaysChanged)
       screen.removeListener("display-removed", onDisplaysChanged)
