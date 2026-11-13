@@ -6,6 +6,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react"
 import {
+  CaretDown,
   CursorClick,
   DotsSixVertical,
   ListDashes,
@@ -15,7 +16,13 @@ import {
   Sun,
 } from "@phosphor-icons/react"
 import { ThinkingOrb } from "thinking-orbs"
-import type { IslandMessage, PermissionDecision, PlanStep, SessionView } from "../../../state"
+import type {
+  IslandMessage,
+  PermissionDecision,
+  PlanStep,
+  QueuedPrompt,
+  SessionView,
+} from "../../../state"
 import { barOrbState, orbState } from "../../../orb"
 import { planWindow } from "../../../plan"
 import { Button } from "@/components/ui/button"
@@ -150,6 +157,10 @@ export function Island() {
   const [screen, setScreen] = useState({ width: 1920, height: 1200 })
   /** The screen size turns the kept share into a length, so nothing is sized until it is in. */
   const [ready, setReady] = useState(false)
+  /** The session the user picked to send to, so the choice outlives the drawer. */
+  const [picked, setPicked] = useState<string | null>(null)
+  /** True while the target chip's session list is open. */
+  const [picking, setPicking] = useState(false)
 
   const shell = useRef<HTMLDivElement>(null)
   const handle = useRef<HTMLDivElement>(null)
@@ -191,6 +202,11 @@ export function Island() {
     if (!open) return
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(timer)
+  }, [open])
+
+  // A list left open when the drawer closed is not open when it comes back.
+  useEffect(() => {
+    if (!open) setPicking(false)
   }, [open])
 
   // The window is sized to the page; report every content change. A share of
@@ -322,7 +338,8 @@ export function Island() {
       resized.current = false
       return
     }
-    if ((event.target as HTMLElement).closest("button, [data-row], [data-resize]")) return
+    if ((event.target as HTMLElement).closest("button, [data-row], [data-composer], [data-resize]"))
+      return
     window.island.toggle()
   }
 
@@ -362,6 +379,9 @@ export function Island() {
   const work = showLatest && !alert ? active : undefined
   const barOrb = barOrbState(active, alert)
   const rows = rowsOf(sessions)
+  // The chip names the session in hand, which is the picked one or the one
+  // the bar is already showing.
+  const target = sessions.find((session) => session.id === picked) ?? active
   const pending = sessions.find((session) => session.permission)?.permission
   const totalTokens = sessions.reduce((sum, session) => sum + (session.tokens || 0), 0)
   const totalCost = sessions.reduce((sum, session) => sum + (session.cost || 0), 0)
@@ -397,7 +417,15 @@ export function Island() {
           <div className="max-h-[280px] overflow-y-auto py-1">
             {rows.length ? (
               rows.map(({ session, sub }) => (
-                <Row key={session.id} session={session} sub={sub} now={now} alert={alert} />
+                <Row
+                  key={session.id}
+                  session={session}
+                  sub={sub}
+                  now={now}
+                  alert={alert}
+                  selected={picked === session.id}
+                  onSelect={setPicked}
+                />
               ))
             ) : (
               <p className={cn("px-4 py-2.5 text-xs", muted)}>Nothing running</p>
@@ -423,6 +451,13 @@ export function Island() {
               </div>
             </div>
           ) : null}
+
+          <Composer
+            target={target}
+            alert={alert}
+            picking={picking}
+            onPick={() => setPicking((open) => !open)}
+          />
 
           <div className="flex items-center gap-1 border-t px-2 py-1.5">
             <Button
@@ -600,11 +635,15 @@ function Row({
   sub,
   now,
   alert,
+  selected,
+  onSelect,
 }: {
   session: SessionView
   sub: boolean
   now: number
   alert: boolean
+  selected: boolean
+  onSelect: (id: string) => void
 }) {
   const waiting = Boolean(session.permission)
   const muted = alert ? "text-warning-foreground/70" : "text-muted-foreground"
@@ -613,7 +652,12 @@ function Row({
   return (
     <div
       data-row
-      className={cn("grid grid-cols-[20px_1fr_auto] items-start gap-2.5 px-4 py-1.5", sub && "pl-9")}
+      onClick={() => onSelect(session.id)}
+      className={cn(
+        "grid cursor-pointer grid-cols-[20px_1fr_auto] items-start gap-2.5 px-4 py-1.5",
+        selected && "bg-accent/50",
+        sub && "pl-9",
+      )}
     >
       {orb ? (
         // A subagent row prints no phase, so its orb is the only word on it.
@@ -659,6 +703,195 @@ function Row({
       <span className={cn("text-[11.5px] tabular-nums", muted)}>
         {elapsed(now - (sub ? session.updated : session.created))}
       </span>
+    </div>
+  )
+}
+
+/** The queue as the server answered it, or why it could not be read. */
+type Queue =
+  | { state: "reading" }
+  | { state: "ready"; items: QueuedPrompt[] }
+  | { state: "failed" }
+
+/** One field, sent to the session the chip names. */
+function Composer({
+  target,
+  alert,
+  picking,
+  onPick,
+}: {
+  target: SessionView | undefined
+  alert: boolean
+  picking: boolean
+  onPick: () => void
+}) {
+  const [text, setText] = useState("")
+  /** What went wrong with the last send, kept in the island where the user is. */
+  const [error, setError] = useState("")
+  const [menu, setMenu] = useState(false)
+  const [queue, setQueue] = useState<Queue>({ state: "reading" })
+  const targetID = target?.id
+  const name = target?.title || "Untitled session"
+
+  // The queue is asked of the server when the menu opens, never counted.
+  useEffect(() => {
+    if (!menu || !targetID) return
+    let live = true
+    setQueue({ state: "reading" })
+    const queued = window.island.queued(targetID)
+    queued
+      .then((items) => {
+        if (live) setQueue({ state: "ready", items })
+      })
+      .catch(() => {
+        // An empty list would claim the queue is empty, which it may not be.
+        if (live) setQueue({ state: "failed" })
+      })
+    return () => {
+      live = false
+    }
+  }, [menu, targetID])
+
+  const finish = (answer: { ok: boolean; error?: string }) => {
+    if (!answer.ok) {
+      // The text stays in the field, so the send can be tried again.
+      setError(answer.error || "The prompt could not be sent")
+      return
+    }
+    setText("")
+    setError("")
+    setMenu(false)
+    // The keyboard goes back to the app, so a stray Enter cannot send again.
+    window.blur()
+  }
+
+  const send = async (delivery: "steer" | "queue") => {
+    const body = text.trim()
+    if (!body || !target) return
+    setError("")
+    const request = { sessionID: target.id, text: body }
+    finish(
+      await window.island.prompt(
+        delivery === "queue"
+          ? { ...request, delivery: "queue" }
+          : { ...request, delivery: "steer" },
+      ),
+    )
+  }
+
+  const cancel = (inboxID: string) => {
+    if (!target) return
+    window.island.cancel({ sessionID: target.id, inboxID })
+    setQueue((current) =>
+      current.state === "ready"
+        ? { state: "ready", items: current.items.filter((item) => item.id !== inboxID) }
+        : current,
+    )
+  }
+
+  return (
+    <div data-composer className="border-t px-3 py-2">
+      <div className="flex items-center gap-1.5">
+        <Button
+          variant="outline"
+          size="xs"
+          onClick={onPick}
+          disabled={!target}
+          aria-haspopup="listbox"
+          aria-expanded={picking}
+          aria-label={`Send to ${name}`}
+          title={`Send to ${name}`}
+          className={cn(
+            "max-w-[120px]",
+            alert && "border-warning-foreground/30 bg-transparent hover:bg-warning-foreground/10",
+          )}
+        >
+          <span className="truncate">{name}</span>
+        </Button>
+
+        <input
+          className={cn(
+            "composer-field h-7 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2 text-xs outline-none",
+            "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
+            "placeholder:text-muted-foreground disabled:opacity-50",
+            alert && "border-warning-foreground/30 placeholder:text-warning-foreground/60",
+          )}
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          onKeyDown={(event) => {
+            // An Enter that closes an input method's composition is not a send.
+            if (event.key !== "Enter" || event.nativeEvent.isComposing) return
+            event.preventDefault()
+            void send("steer")
+          }}
+          placeholder={target ? "Prompt" : "No session to send to"}
+          aria-label="Prompt"
+          disabled={!target}
+          spellCheck={false}
+          autoComplete="off"
+        />
+
+        <Button
+          variant="outline"
+          size="icon-xs"
+          onClick={() => setMenu((open) => !open)}
+          disabled={!target}
+          aria-label="Send options"
+          aria-expanded={menu}
+          title="Send options"
+          className={cn(
+            alert && "border-warning-foreground/30 bg-transparent hover:bg-warning-foreground/10",
+          )}
+        >
+          <CaretDown weight="duotone" />
+        </Button>
+      </div>
+
+      {error ? (
+        <p className={cn("mt-1 text-[11px]", alert ? "text-warning-foreground" : "text-destructive")}>
+          {error}
+        </p>
+      ) : null}
+
+      {menu && target ? (
+        // A surface of its own, so the menu reads the same on a warning drawer.
+        <div className="mt-1.5 rounded-md border bg-background p-1.5 text-foreground">
+          <div className="flex items-center gap-2 pb-1">
+            <Button
+              size="xs"
+              variant="secondary"
+              onClick={() => void send("queue")}
+              disabled={!text.trim()}
+            >
+              Queue
+            </Button>
+            <span className="text-[11px] text-muted-foreground">Send after the current turn</span>
+          </div>
+          {queue.state === "reading" ? (
+            <p className="px-1 pt-1 text-[11px] text-muted-foreground">Reading the queue</p>
+          ) : queue.state === "failed" ? (
+            <p className="px-1 pt-1 text-[11px] text-muted-foreground">The queue could not be read</p>
+          ) : queue.items.length ? (
+            <ul className="flex flex-col">
+              {queue.items.map((item) => (
+                <li key={item.id} className="flex items-center gap-2 px-1 py-0.5">
+                  <span className="min-w-0 flex-1 truncate text-[11.5px]">{item.text}</span>
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    className="h-5 px-1.5 text-[11px]"
+                    onClick={() => cancel(item.id)}
+                  >
+                    Cancel
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="px-1 pt-1 text-[11px] text-muted-foreground">Nothing queued</p>
+          )}
+        </div>
+      ) : null}
     </div>
   )
 }

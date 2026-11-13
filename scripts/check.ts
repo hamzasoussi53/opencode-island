@@ -541,4 +541,19 @@ assert.match(windowSource, /DRAWER_HEIGHT_SHARE = 0\.8/)
 const guiSource = readFileSync(new URL("../src/gui.tsx", import.meta.url), "utf8")
 assert.match(guiSource, /updated: _updated/)
 
+// The composer sends on Enter, and shows a failure in the island.
+const islandSource = readFileSync(
+  new URL("../src/island/app/components/island.tsx", import.meta.url),
+  "utf8",
+)
+assert.match(islandSource, /onKeyDown/)
+assert.match(islandSource, /delivery: "steer"/)
+assert.match(islandSource, /delivery: "queue"/)
+// The queue is asked for, not counted, and one prompt can be taken back.
+assert.match(islandSource, /island\.queued\(/)
+assert.match(islandSource, /island\.cancel\(/)
+// The keyboard goes back to the app after a send, so a stray Enter cannot
+// send a second prompt.
+assert.match(islandSource, /window\.blur\(\)/)
+
 console.log("ok")
