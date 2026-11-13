@@ -66,6 +66,28 @@ export interface IslandState {
   waiting: number
 }
 
+/** A session you can pick to send a prompt to. */
+export interface SessionPick {
+  id: string
+  title: string
+  agent: string
+  /** Absolute path of the project the session belongs to. */
+  directory: string
+  status: SessionStatus
+  /** Epoch millis of the last event that touched this session. */
+  updated: number
+}
+
+/** Every session the island knows about, newest first. */
+export type SessionPicks = SessionPick[]
+
+/** A prompt waiting for a session's turn to end. */
+export interface QueuedPrompt {
+  /** The id the server gave it, so it can be cancelled. */
+  id: string
+  text: string
+}
+
 export interface IslandMessage extends IslandState {
   /** Whether the island shows its list, or only the contracted line. */
   open: boolean

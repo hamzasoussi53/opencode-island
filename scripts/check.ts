@@ -7,7 +7,7 @@ import { failPlan, looksLikePlan, nestedPlan, parseSteps, planWindow, stopPlan }
 import { installPlanRule, planRule } from "../src/rules.ts"
 import { islandShouldExist } from "../src/lifecycle.ts"
 import { barOrbState, orbState } from "../src/orb.ts"
-import type { IslandState, PlanState } from "../src/state.ts"
+import type { IslandState, PlanState, QueuedPrompt, SessionPicks } from "../src/state.ts"
 
 // The island shows the last ten words of an answer while it streams.
 assert.equal(lastWords("one two three", 10), "one two three")
@@ -175,28 +175,127 @@ const created = {
   data: { sessionID: "s1", title: "Work", agent: "build", location: { directory: "/tmp" } },
 }
 
-/** Runs the model over a stream of events and hands back what it published. */
-async function run(events: unknown[]): Promise<IslandState> {
-  const fake = {
-    session: { list: async () => ({ data: [] }) },
-    permission: { request: { list: async () => ({ data: [] }) } },
-    event: {
-      subscribe: () => ({
-        async *[Symbol.asyncIterator]() {
-          for (const event of events) yield event
+type Delivery = "steer" | "queue"
+
+type Sent = { sessionID: string; text: string; delivery: Delivery }
+
+type Cancelled = { sessionID: string; inboxID: string }
+
+type Answer = { ok: boolean; error?: string }
+
+/** A fake server that records what the model asked it to do. */
+function server(options: { sessions?: unknown[]; inbox?: unknown[]; error?: Error } = {}) {
+  const sent: Sent[] = []
+  const cancelled: Cancelled[] = []
+  const client = {
+    session: {
+      list: async () => ({ data: options.sessions ?? [] }),
+      prompt: async (input: Sent) => {
+        sent.push(input)
+        if (options.error) throw options.error
+      },
+      inbox: {
+        list: async () => options.inbox ?? [],
+        cancel: async (input: Cancelled) => {
+          cancelled.push(input)
         },
-      }),
+      },
     },
+    permission: { request: { list: async () => ({ data: [] }) } },
   }
+  return { client, sent, cancelled }
+}
+
+/** Starts the model on a fake server, lets it seed, and hands it back. */
+async function modelOn(at = server(), events: unknown[] = []) {
   let seen: IslandState | undefined
+  const model = createModel(
+    {
+      ...at.client,
+      event: {
+        subscribe: () => ({
+          async *[Symbol.asyncIterator]() {
+            for (const event of events) yield event
+          },
+        }),
+      },
+    } as never,
+    (state) => {
+      seen = state
+    },
+  )
   const controller = new AbortController()
-  createModel(fake as never, (state) => {
-    seen = state
-  }).start(controller.signal)
+  model.start(controller.signal)
   await new Promise((resolve) => setTimeout(resolve, 50))
   controller.abort()
+  return { model, state: () => seen }
+}
+
+/** Runs the model over a stream of events and hands back what it published. */
+async function run(events: unknown[], at = server()): Promise<IslandState> {
+  const { state } = await modelOn(at, events)
+  const seen = state()
   assert.ok(seen, "the model never published a state")
   return seen
+}
+
+/**
+ * A server's session list, built from the fields the model reads. The list
+ * carries no status: a seeded session is idle until an event says otherwise.
+ */
+function listedOf(
+  sessions: Array<{ id: string; title: string; agent: string; status: string; updated: number }>,
+) {
+  return sessions.map(({ id, title, agent, updated }) => ({
+    id,
+    title,
+    agent,
+    cost: 0,
+    tokens: { input: 0, output: 0 },
+    time: { created: updated, updated },
+    location: { directory: "/tmp/project" },
+  }))
+}
+
+/** The picks the model makes of a server's session list. */
+async function picksOf(sessions: Parameters<typeof listedOf>[0]) {
+  const { model } = await modelOn(server({ sessions: listedOf(sessions) }))
+  return model.picks()
+}
+
+/** What the server was asked to send, or the failure the model answered. */
+async function promptOf(
+  sessionID: string,
+  text: string,
+  delivery: Delivery,
+  error?: Error,
+): Promise<Sent | Answer> {
+  const at = server(error ? { error } : {})
+  const { model } = await modelOn(at)
+  const answer = await model.prompt(sessionID, text, delivery)
+  return answer.ok ? (at.sent[0] ?? answer) : answer
+}
+
+/** Every prompt the server was asked to send, in order. */
+async function promptsOf(list: Array<[string, string, Delivery]>): Promise<Sent[]> {
+  const at = server()
+  const { model } = await modelOn(at)
+  for (const [sessionID, text, delivery] of list) await model.prompt(sessionID, text, delivery)
+  return at.sent
+}
+
+/** The queue the model reads out of a server inbox. */
+async function queuedOf(sessionID: string, items: unknown[]): Promise<QueuedPrompt[]> {
+  const { model } = await modelOn(server({ inbox: items }))
+  return model.queued(sessionID)
+}
+
+/** What the server was asked to cancel. */
+async function cancelOf(sessionID: string, inboxID: string): Promise<Cancelled | undefined> {
+  const at = server()
+  const { model } = await modelOn(at)
+  await model.cancel(sessionID, inboxID)
+  return at.cancelled[0]
 }
 
 const planCall = (id: string, input: unknown) => ({
@@ -333,6 +432,73 @@ const nested = await run([
   },
 ])
 assert.deepEqual(nested.sessions[0]?.plan, [{ n: 1, title: "Read it", state: "working" }])
+
+// The picks are every session the model knows, newest first, running ones
+// among them, and a finished session is still there.
+const picks = await picksOf([
+  { id: "s1", title: "Older", agent: "build", status: "idle", updated: 100 },
+  { id: "s2", title: "Newer", agent: "build", status: "busy", updated: 200 },
+])
+assert.deepEqual(
+  picks.map((pick) => pick.id),
+  ["s2", "s1"],
+)
+assert.equal(picks[0]?.title, "Newer")
+
+// A session too old to be a row is still one you can pick: it is exactly the
+// one you come back to.
+const yesterday = [
+  {
+    id: "s9",
+    title: "Yesterday",
+    agent: "build",
+    status: "idle",
+    updated: Date.now() - 7 * 60 * 60 * 1000,
+  },
+]
+const { model: old, state: oldState } = await modelOn(server({ sessions: listedOf(yesterday) }))
+assert.deepEqual(oldState()?.sessions, [])
+assert.deepEqual(
+  old.picks().map((pick) => pick.id),
+  ["s9"],
+)
+
+// A prompt is sent with the delivery the island asked for.
+const sent = await promptOf("s1", "keep going", "queue")
+assert.deepEqual(sent, { sessionID: "s1", text: "keep going", delivery: "queue" })
+
+// A send that fails comes back as a failure, not as nothing.
+const failedSend = await promptOf("s1", "keep going", "steer", new Error("no such session"))
+assert.deepEqual(failedSend, { ok: false, error: "no such session" })
+
+// The queue is asked of the server, so a prompt queued before the island
+// started is still there.
+const queued = await queuedOf("s1", [
+  { id: "i1", type: "user", delivery: "queue", payload: { text: "later" } },
+  { id: "i2", type: "user", delivery: "steer", payload: { text: "now" } },
+])
+assert.deepEqual(queued, [{ id: "i1", text: "later" }])
+
+// A prompt to a session that is not running is still sent, and the server
+// starts it.
+const idle = await promptOf("s1", "carry on", "steer")
+assert.deepEqual(idle, { sessionID: "s1", text: "carry on", delivery: "steer" })
+
+// Two sends in a row both reach the server: the second is not swallowed by
+// the first.
+const twice = await promptsOf([
+  ["s1", "one", "steer"],
+  ["s1", "two", "steer"],
+])
+assert.equal(twice.length, 2)
+assert.deepEqual(
+  twice.map((prompt) => prompt.text),
+  ["one", "two"],
+)
+
+// A queued prompt is cancelled by the id the server gave it.
+const cancelled = await cancelOf("s1", "i1")
+assert.deepEqual(cancelled, { sessionID: "s1", inboxID: "i1" })
 
 // The island must not take the app's taskbar button with it, or there is
 // nothing to right-click to close OpenCode. It is a window option, so the

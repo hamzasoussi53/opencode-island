@@ -4,7 +4,9 @@ import type {
   IslandState,
   PermissionDecision,
   PermissionView,
+  QueuedPrompt,
   SessionPhase,
+  SessionPicks,
   SessionStatus,
   SessionView,
 } from "./state"
@@ -125,6 +127,9 @@ type Watched =
 /** A session untouched for this long stops being worth a row. */
 const EVICT_AFTER_MS = 6 * 60 * 60 * 1000
 
+/** How many sessions the island keeps to pick from, the seed's own cap. */
+const PICK_LIMIT = 200
+
 /** How much of an answer is kept around, enough for the island to show. */
 const STREAM_WINDOW = 200
 
@@ -243,6 +248,44 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
 
   const publish = () => onChange(state())
 
+  /**
+   * Every session the model knows, newest first. It is read off the same map
+   * the rows come from, so a session the rows evicted is still here to pick:
+   * the eviction only hides a row, it never forgets the session.
+   */
+  const picks = (): SessionPicks =>
+    [...sessions.values()]
+      .map(({ id, title, agent, directory, status, updated }) => ({
+        id,
+        title,
+        agent,
+        directory,
+        status,
+        updated,
+      }))
+      .sort((a, b) => b.updated - a.updated)
+      .slice(0, PICK_LIMIT)
+
+  /** Runs a call the island asked for, and answers rather than throws. */
+  const answer = async (call: () => Promise<unknown>): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      await call()
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
+  /** What is waiting in a session's queue, as the server has it. */
+  const queued = async (sessionID: string): Promise<QueuedPrompt[]> => {
+    const items = await client.session.inbox.list({ sessionID })
+    return items.flatMap((item) =>
+      item.type === "user" && item.delivery === "queue"
+        ? [{ id: item.id, text: item.payload.text }]
+        : [],
+    )
+  }
+
   const toPermission = (data: {
     id: string
     sessionID: string
@@ -260,7 +303,7 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
   const seed = async (signal: AbortSignal) => {
     try {
       const [listed, pending] = await Promise.all([
-        client.session.list({ limit: 200 }, { signal }),
+        client.session.list({ limit: PICK_LIMIT }, { signal }),
         client.permission.request.list(undefined, { signal }),
       ])
       for (const info of listed.data) {
@@ -488,5 +531,13 @@ export function createModel(client: Client, onChange: (state: IslandState) => vo
       })
     },
     state,
+    picks,
+    prompt(sessionID: string, text: string, delivery: "steer" | "queue") {
+      return answer(() => client.session.prompt({ sessionID, text, delivery }))
+    },
+    queued,
+    cancel(sessionID: string, inboxID: string) {
+      return answer(() => client.session.inbox.cancel({ sessionID, inboxID }))
+    },
   }
 }
