@@ -391,6 +391,26 @@ h1 {
   grid-column: span 4;
 }
 
+/* the composer gets a band of its own, with the drawer beside it */
+.cell.band {
+  grid-column: span 6;
+  flex-direction: row;
+  align-items: center;
+  gap: 3rem;
+}
+
+.cell.band .cell-text {
+  flex: 1 1 auto;
+}
+
+.cell.band .fragment {
+  align-self: center;
+  flex: 0 0 auto;
+  width: 420px;
+  max-width: 100%;
+  max-height: none;
+}
+
 .cell:hover {
   transform: translateY(-5px);
   border-color: rgba(48, 209, 88, 0.35);
@@ -672,6 +692,13 @@ footer {
   .cell:nth-child(3),
   .cell:nth-child(4) {
     grid-column: auto;
+  }
+
+  .cell.band {
+    grid-column: auto;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2rem;
   }
 
   .cell {
