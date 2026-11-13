@@ -621,6 +621,33 @@ assert.match(islandSource, /drawerSize/)
 assert.match(islandSource, /data-drawer-resize="bottom"/)
 assert.match(islandSource, /data-drawer-resize="left"/)
 
+// The picker's list floats above the composer in a drawer that has a size of
+// its own, so it adds no height to the composer and cannot push it out of the
+// drawer. It is capped by the room the drawer has above the composer, which is
+// measured, so no viewport height is guessed at.
+assert.match(islandSource, /absolute bottom-full/)
+assert.match(islandSource, /element\.style\.maxHeight/)
+assert.doesNotMatch(islandSource, /100vh/)
+// The kept size is the one the window applied, never one measured off the
+// viewport.
+assert.doesNotMatch(islandSource, /window\.innerWidth/)
+assert.match(preloadSource, /onDrawerSize: \(handler\) =>/)
+assert.match(windowSource, /\$\{CHANNEL\}:applied-size/)
+
+// A grip that is clicked but never dragged is not a resize, so the drawer
+// keeps the size it had.
+assert.match(islandSource, /dragMoved/)
+
+// The grips are eight pixels: enough to hit, and not enough to cover the
+// buttons in the footer.
+assert.match(islandSource, /h-2 cursor-ns-resize/)
+assert.match(islandSource, /w-2 cursor-ew-resize/)
+
+// The resize says which surface the grip belongs to, so a flag that is a frame
+// stale cannot send the drag to the wrong size.
+assert.match(preloadSource, /resizeStart: \(surface, edge\) =>/)
+assert.match(windowSource, /resize\.surface === "drawer"/)
+
 // The drawer stays open by default, and the toggle turns the old behaviour
 // back on.
 assert.match(islandSource, /opencode-island:auto-close/)

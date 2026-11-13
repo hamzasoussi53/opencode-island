@@ -23,10 +23,12 @@ declare global {
       dragStart: () => void
       dragEnd: () => void
       ignore: (ignore: boolean) => void
-      resizeStart: (edge?: "bottom" | "left") => void
+      resizeStart: (surface: "bar" | "drawer", edge?: "bottom" | "left") => void
       resize: (screenX: number, screenY: number) => void
       resizeEnd: () => void
       drawerSize: (size: { width: number; height: number }) => void
+      /** The size the window applied to the drawer. */
+      onDrawerSize: (handler: (size: { width: number; height: number }) => void) => void
       autoClose: (mode: AutoClose) => void
       openApp: () => void
       quit: () => void

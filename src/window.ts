@@ -139,8 +139,16 @@ export function createIslandWindow(options: IslandWindowOptions) {
   let center: number | null = null
   // While an edge is dragged its opposite edge holds still: the bottom edge of
   // the bar or of the drawer, whose top stays put, or the drawer's left edge,
-  // whose right edge is the screen edge.
-  let resize: { edge: "bottom" | "left"; top: number; right: number } | null = null
+  // whose right edge is the screen edge. The surface says which size the drag
+  // writes to, so a flag that is a frame stale cannot send it to the wrong one.
+  let resize: {
+    surface: "bar" | "drawer"
+    edge: "bottom" | "left"
+    top: number
+    right: number
+    /** True once the drag has changed the size it writes to. */
+    changed: boolean
+  } | null = null
 
   const place = (animate = false) => {
     if (window.isDestroyed()) return
@@ -256,20 +264,27 @@ export function createIslandWindow(options: IslandWindowOptions) {
   // An edge is dragged from its grip: the bar's bottom edge, or the drawer's
   // bottom or left edge. The window does the arithmetic, so the edge follows
   // the mouse exactly.
-  const onResizeStart = (event: Electron.IpcMainEvent, edge: "bottom" | "left" | undefined) => {
+  const onResizeStart = (
+    event: Electron.IpcMainEvent,
+    grip: { surface?: string; edge?: string } | undefined,
+  ) => {
     if (!ours(event.sender)) return
     const bounds = window.getBounds()
     resize = {
-      edge: edge === "left" ? "left" : "bottom",
+      surface: grip?.surface === "drawer" ? "drawer" : "bar",
+      edge: grip?.edge === "left" ? "left" : "bottom",
       top: bounds.y,
       right: bounds.x + bounds.width,
+      changed: false,
     }
   }
 
   const onResize = (event: Electron.IpcMainEvent, at: { x?: number; y?: number }) => {
     if (!ours(event.sender) || !resize) return
     const area = screen.getPrimaryDisplay().workArea
-    const box = open ? (drawer ?? content ?? size) : size
+    // The grip says which size the drag writes to, not whether the island
+    // happens to be open at this instant.
+    const box = resize.surface === "drawer" ? (drawer ?? content ?? size) : size
     if (resize.edge === "left") {
       // The right edge is the screen edge and never moves, so the drawer grows
       // leftward from it.
@@ -280,16 +295,21 @@ export function createIslandWindow(options: IslandWindowOptions) {
       )
       if (width === box.width) return
       drawer = { width, height: box.height }
+      resize.changed = true
       place(false)
       return
     }
-    const min = open ? MIN_DRAWER_HEIGHT : 24
-    const max = open ? Math.round(area.height * DRAWER_HEIGHT_SHARE) : area.height
+    const min = resize.surface === "drawer" ? MIN_DRAWER_HEIGHT : 24
+    const max = resize.surface === "drawer" ? Math.round(area.height * DRAWER_HEIGHT_SHARE) : area.height
     const height = Math.min(max, Math.max(min, Math.round((at?.y ?? 0) - resize.top)))
     if (height === box.height) return
-    // A report while the drawer is open belongs to the drawer, never to the bar.
-    if (open) drawer = { width: box.width, height }
-    else size = { ...size, height }
+    // A drag of the drawer's edge belongs to the drawer, never to the bar.
+    if (resize.surface === "drawer") {
+      drawer = { width: box.width, height }
+      resize.changed = true
+    } else {
+      size = { ...size, height }
+    }
     place(false)
   }
 
@@ -298,10 +318,21 @@ export function createIslandWindow(options: IslandWindowOptions) {
     // A dragged bottom edge holds the top still, so the island's centre moves to
     // the new centre and the island stays where it was put.
     if (resize?.edge === "bottom") {
-      const box = open ? (drawer ?? content ?? size) : size
+      const box = resize.surface === "drawer" ? (drawer ?? content ?? size) : size
       center = resize.top + box.height / 2
     }
+    // The drawer was resized, so the page is told the size that was applied.
+    if (resize?.surface === "drawer" && resize.changed) pushDrawerSize()
     resize = null
+  }
+
+  // The window tells the page the size it applied, so the page keeps the size
+  // that is on the screen and not the one it measured for itself. The main
+  // half is told too, so a resized drawer is in the log.
+  const pushDrawerSize = () => {
+    if (!drawer || window.isDestroyed()) return
+    options.onDrawerSize(drawer)
+    window.webContents.send(`${CHANNEL}:applied-size`, drawer)
   }
 
   // The drawer's size is in pixels, so it is clamped against the screen rather
@@ -322,7 +353,9 @@ export function createIslandWindow(options: IslandWindowOptions) {
       Math.max(MIN_DRAWER_HEIGHT, Math.round(next?.height ?? 0)),
     )
     drawer = { width, height }
-    options.onDrawerSize(drawer)
+    // The page asked for a size, so it is told the one that was applied: the
+    // kept size and the shown size are then the same size.
+    pushDrawerSize()
     if (open) place()
   }
 

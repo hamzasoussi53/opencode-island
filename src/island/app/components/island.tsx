@@ -191,6 +191,10 @@ export function Island() {
   const moved = useRef(false)
   /** Which edge is being dragged: the closed bar's length, or the drawer's. */
   const resizing = useRef<"bar" | "bottom" | "left" | null>(null)
+  /** Where the drag began, so a grip that is only clicked is not a drag. */
+  const dragStart = useRef<{ x: number; y: number } | null>(null)
+  /** True once the dragged edge has actually moved. */
+  const dragMoved = useRef(false)
   /** True just after a resize, so the release does not open the island. */
   const resized = useRef(false)
   const lastSize = useRef("")
@@ -203,6 +207,12 @@ export function Island() {
   useEffect(() => {
     window.island.onState(setState)
     window.island.onPicks(setPicks)
+    // The window tells the page the size it applied, so the page keeps the
+    // size that is on the screen and not the one it measured for itself.
+    window.island.onDrawerSize((size) => {
+      setSized(true)
+      localStorage.setItem(SIZE_KEY, `${size.width} x ${size.height}`)
+    })
     window.island.ready()
     void window.island
       .screen()
@@ -299,7 +309,16 @@ export function Island() {
   // arithmetic, so the edge follows the mouse.
   useEffect(() => {
     const onMove = (event: MouseEvent) => {
-      if (!resizing.current) return
+      const edge = resizing.current
+      if (!edge) return
+      // A grip that is clicked but never dragged is not a resize: the drawer
+      // keeps the size it had, and does not become a sized one.
+      if (edge !== "bar" && !dragMoved.current) {
+        const start = dragStart.current
+        if (!start) return
+        if (Math.abs(event.screenX - start.x) < 3 && Math.abs(event.screenY - start.y) < 3) return
+        dragMoved.current = true
+      }
       window.island.resize(event.screenX, event.screenY)
     }
     const onUp = () => {
@@ -317,15 +336,9 @@ export function Island() {
         setShare(clamped)
         localStorage.setItem(SHARE_KEY, String(clamped))
       } else {
-        // The window applies the last move a frame behind the pointer, so the
-        // size is read once that frame has landed, never a frame short.
-        requestAnimationFrame(() => {
-          setDragging(null)
-          setSized(true)
-          const size = { width: window.innerWidth, height: window.innerHeight }
-          localStorage.setItem(SIZE_KEY, `${size.width} x ${size.height}`)
-          window.island.drawerSize(size)
-        })
+        setDragging(null)
+        // The window sends the size it applied, so the page keeps that one.
+        if (dragMoved.current) setSized(true)
       }
       window.island.resizeEnd()
     }
@@ -407,7 +420,9 @@ export function Island() {
     if (event.button !== 0) return
     event.stopPropagation()
     resizing.current = "bar"
-    window.island.resizeStart()
+    dragStart.current = { x: event.screenX, y: event.screenY }
+    dragMoved.current = false
+    window.island.resizeStart("bar")
   }
 
   // The open drawer's bottom and left edges are its own size handles. The right
@@ -416,8 +431,10 @@ export function Island() {
     if (event.button !== 0) return
     event.stopPropagation()
     resizing.current = edge
+    dragStart.current = { x: event.screenX, y: event.screenY }
+    dragMoved.current = false
     setDragging(edge)
-    window.island.resizeStart(edge)
+    window.island.resizeStart("drawer", edge)
   }
 
   // The drawer stays open until it is closed. The toggle turns the old
@@ -472,6 +489,7 @@ export function Island() {
   return (
     <div
       ref={shell}
+      data-shell
       data-theme={resolved}
       data-waiting={alert}
       onMouseDown={onMouseDown}
@@ -723,20 +741,22 @@ export function Island() {
       )}
 
       {/* The open drawer has a grip on its bottom edge and on its left edge.
-          The right edge is the screen edge, so the left one grows it leftward. */}
+          The right edge is the screen edge, so the left one grows it leftward.
+          The grips are eight pixels: enough to hit, and not enough to cover
+          the buttons in the footer or the rows on the left. */}
       {open ? (
         <>
           <div
             data-drawer-resize="bottom"
             onMouseDown={(event) => onDrawerDown(event, "bottom")}
             title="Drag to change the height"
-            className="absolute inset-x-0 bottom-0 h-1.5 cursor-ns-resize hover:bg-accent/60"
+            className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize hover:bg-accent/60"
           />
           <div
             data-drawer-resize="left"
             onMouseDown={(event) => onDrawerDown(event, "left")}
             title="Drag to change the width"
-            className="absolute inset-y-0 left-0 w-1.5 cursor-ew-resize hover:bg-accent/60"
+            className="absolute inset-y-0 left-0 w-2 cursor-ew-resize hover:bg-accent/60"
           />
         </>
       ) : null}
@@ -872,8 +892,32 @@ function Picker({
   fixed: boolean
   onChoose: (id: string) => void
 }) {
+  const list = useRef<HTMLDivElement>(null)
+
+  // A drawer with a size of its own cannot grow to fit the list, so the list
+  // floats above the composer: it adds no height to it, and the composer
+  // cannot be pushed out of the drawer. It is capped by the room the drawer
+  // has above the composer, which is measured, because the drawer does not
+  // know its own height.
+  useLayoutEffect(() => {
+    const element = list.current
+    const composer = element?.parentElement
+    const shell = element?.closest("[data-shell]")
+    if (!fixed || !element || !composer || !shell) return
+    const cap = () => {
+      const room = composer.getBoundingClientRect().top - shell.getBoundingClientRect().top
+      element.style.maxHeight = `${Math.max(0, Math.min(168, Math.round(room)))}px`
+    }
+    cap()
+    const observer = new ResizeObserver(cap)
+    observer.observe(shell)
+    observer.observe(composer)
+    return () => observer.disconnect()
+  }, [fixed])
+
   return (
     <div
+      ref={list}
       role="listbox"
       aria-label="Sessions open in OpenCode"
       onKeyDown={(event) => {
@@ -885,10 +929,10 @@ function Picker({
         options[at + (event.key === "ArrowDown" ? 1 : -1)]?.focus()
       }}
       className={cn(
-        "mb-1.5 overflow-y-auto rounded-md border bg-background p-1 text-foreground",
-        // A fixed drawer cannot grow to fit the list, so it takes only what is
-        // left above the composer's field.
-        fixed ? "max-h-[min(168px,calc(100vh-140px))]" : "max-h-[168px]",
+        "overflow-y-auto rounded-md border bg-background p-1 text-foreground",
+        // A drawer with a size of its own may not grow to fit the list, so the
+        // list floats above the composer and takes the room that is left.
+        fixed ? "absolute bottom-full left-3 right-3 z-10" : "mb-1.5 max-h-[168px]",
       )}
     >
       {picks.length ? (
@@ -1031,7 +1075,7 @@ function Composer({
   }
 
   return (
-    <div data-composer className="shrink-0 border-t px-3 py-2">
+    <div data-composer className="relative shrink-0 border-t px-3 py-2">
       {/* The tabs open in OpenCode, above the chip: the composer keeps its
           place at the foot of the drawer whatever the list holds. */}
       {picking ? <Picker picks={picks} target={target?.id} fixed={fixed} onChoose={onChoose} /> : null}

@@ -16,10 +16,13 @@ contextBridge.exposeInMainWorld("island", {
   dragStart: () => ipcRenderer.send("opencode-island:drag-start"),
   dragEnd: () => ipcRenderer.send("opencode-island:drag-end"),
   ignore: (ignore) => ipcRenderer.send("opencode-island:ignore", ignore),
-  resizeStart: (edge) => ipcRenderer.send("opencode-island:resize-start", edge),
+  resizeStart: (surface, edge) =>
+    ipcRenderer.send("opencode-island:resize-start", { surface, edge }),
   resize: (screenX, screenY) => ipcRenderer.send("opencode-island:resize", { x: screenX, y: screenY }),
   resizeEnd: () => ipcRenderer.send("opencode-island:resize-end"),
   drawerSize: (size) => ipcRenderer.send("opencode-island:drawer-size", size),
+  onDrawerSize: (handler) =>
+    ipcRenderer.on("opencode-island:applied-size", (_event, size) => handler(size)),
   autoClose: (mode) => ipcRenderer.send("opencode-island:auto-close", mode),
   openApp: () => ipcRenderer.send("opencode-island:open-app"),
   quit: () => ipcRenderer.send("opencode-island:quit"),
