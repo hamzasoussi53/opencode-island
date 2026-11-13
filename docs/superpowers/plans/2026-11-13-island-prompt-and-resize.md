@@ -18,6 +18,13 @@
 - The picks list is sent on its own channel and only when it changes. It must not ride on `IslandMessage`, which is published on every token of every answer.
 - The queue is asked for, not counted. `session.inbox.enqueued` only fires for prompts queued while the island is connected, so a count would be wrong for anything queued before.
 - `delivery` defaults to `"steer"` on the server, so a queued prompt must be asked for by name.
+- The server must support `session.prompt`'s `delivery` and the inbox API. The
+  app's own sidecar does: it is version 2.3.0 and its binary carries
+  `delivery??"steer"` and the inbox tables. A server without it would take
+  the prompt and ignore the delivery, so the *Queue* button would steer
+  instead. The island must not pretend a queue is queued when the server
+  cannot queue, so the queue menu shows what the server reports and nothing
+  more.
 - A failed send is shown in the island. The island is where the user is; the app's log is not.
 - After a send the keyboard goes back to the app and the drawer closes, unless a permission is holding it open.
 - The composer only sends on Enter, and only when the field has text in it. Nothing is sent by focus alone, by blur, or by any other button.
