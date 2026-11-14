@@ -27,7 +27,9 @@ cp -R docs/. "$tmp"/
 rm -rf "$tmp/superpowers" "$tmp/panel.png"
 
 git -C "$tmp" add -A
-git -C "$tmp" commit -q -m "site: the landing page"
+# A release that changes nothing on the page leaves nothing to commit, and a
+# commit with nothing in it is an error the script would die on.
+git -C "$tmp" diff --cached --quiet || git -C "$tmp" commit -q -m "site: the landing page"
 git -C "$tmp" push -q origin "$branch"
 
 echo "published to $repo/tree/$branch"
