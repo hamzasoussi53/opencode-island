@@ -1,6 +1,6 @@
 {
   "name": "opencode-island",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "A macOS and Windows Dynamic Island for OpenCode: live status of every session and agent on your machine, permission prompts you can answer in place, and a composer to talk to your agents.",
   "keywords": [
     "opencode",
