@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, screen } from "electron"
+import { BrowserWindow, app, ipcMain, screen } from "electron"
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -125,6 +125,13 @@ export function createIslandWindow(options: IslandWindowOptions) {
   window.setAlwaysOnTop(true, "screen-saver")
   if (process.platform === "darwin") {
     window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    // A window that may sit over a full-screen app is a "full-screen
+    // auxiliary" one, and macOS only allows that in an agent app: the whole
+    // app drops to accessory, so it loses its Dock icon, its Dock menu and
+    // its menu bar, and it cannot be brought back with Cmd+Tab. OpenCode is
+    // an ordinary app, so the policy goes back to what it was. The island
+    // keeps its place over the full-screen app either way.
+    app.setActivationPolicy("regular")
   }
 
   let size = { width: 460, height: 240 }
