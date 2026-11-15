@@ -536,10 +536,13 @@ const windowSource = readFileSync(new URL("../src/window.ts", import.meta.url), 
 // nothing to right-click to close OpenCode.
 assert.match(windowSource, /skipTaskbar: false/)
 
-// The island exists while the app has a window, and not one moment longer.
-assert.equal(islandShouldExist(0), false)
-assert.equal(islandShouldExist(1), true)
-assert.equal(islandShouldExist(3), true)
+// The island exists while the app has a window and the user has not turned it
+// off, and not one moment longer.
+assert.equal(islandShouldExist(0, true), false)
+assert.equal(islandShouldExist(1, true), true)
+assert.equal(islandShouldExist(3, true), true)
+assert.equal(islandShouldExist(1, false), false)
+assert.equal(islandShouldExist(3, false), false)
 
 // The island's page can ask for a prompt to be sent, and for the queue.
 const preloadSource = readFileSync(new URL("../src/island/preload.cjs", import.meta.url), "utf8")
