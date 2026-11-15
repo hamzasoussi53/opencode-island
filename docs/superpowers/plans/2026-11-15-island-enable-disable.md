@@ -15,7 +15,7 @@
 - "Off" means the island window is **destroyed**, not hidden: no renderer, no page, nothing on the screen.
 - The plugin keeps following the app's server while the island is off.
 - The off state lives in the app's plugin storage, so it survives a restart of OpenCode. The island's other switches stay remembered for the session only.
-- The way back is an item in the OpenCode **app menu** (`menu: "app"`), labelled `Hide island` while the island is there and `Show island` while it is not.
+- The way back is two items in the OpenCode **app menu** (`menu: "app"`), `Show island` and `Hide island`. Only one is live at a time; the native menu cannot change its labels while it is open, so the live item carries the state.
 - The island's own control is a plain **button** in the drawer's bottom bar, not a toggle: its off state is never on screen.
 - No keybind, no tray icon, no command in the palette, no button in the closed tab.
 
@@ -166,17 +166,30 @@ In `src/gui.tsx`:
         },
 ```
 
-- Add the menu item, after `sync()` is defined:
+- Add the menu items, after `sync()` is defined. The native menu is built once,
+  so the labels cannot follow the state: the state rides on which item is lit,
+  and the menu reads `enabled` again every time it opens.
 
 ```ts
     // The way back: the island is gone while it is off, so the app's own menu
     // is what turns it on again.
     ctx.add(MenubarItem, () => ({
       menu: "app" as const,
-      id: "island",
-      label: enabled.value ? "Hide island" : "Show island",
+      id: "island-show",
+      label: "Show island",
+      enabled: () => !enabled.value,
       run: () => {
-        enabled.set(!enabled.value)
+        enabled.set(true)
+        sync()
+      },
+    }))
+    ctx.add(MenubarItem, () => ({
+      menu: "app" as const,
+      id: "island-hide",
+      label: "Hide island",
+      enabled: () => enabled.value,
+      run: () => {
+        enabled.set(false)
         sync()
       },
     }))
@@ -215,8 +228,10 @@ Run: `npm run build`, then start the OpenCode desktop app with the plugin linked
 
 - The drawer's bottom bar shows an eye-slash button between "Open OpenCode" and the power button.
 - Pressing it makes the island disappear at once.
-- The OpenCode app menu shows `Show island`; choosing it brings the island back as the closed tab, with the size and position it had.
-- The menu item reads `Hide island` again, and pressing the eye-slash again turns it off: one island, not two.
+- The OpenCode app menu shows two items, `Show island` and `Hide island`, of which only one is live: `Show island` when the island is off, `Hide island` when it is on. The other is greyed out.
+- Choosing `Show island` brings the island back as the closed tab, with the size and position it had.
+- Choosing `Hide island` turns it off from the menu, and the island leaves the screen.
+- Pressing the eye-slash again turns it off too: one island, not two.
 - Turn the island off while an approval is waiting: the island goes, nothing is left half-open, and the approval is answered in OpenCode.
 - Close OpenCode's last window while the island is off, then open a window again: no island appears.
 - Restart OpenCode: the island is still off, and the menu item still reads `Show island`.

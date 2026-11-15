@@ -181,8 +181,14 @@ above the grip that resizes it.
 
 The eye-slash button turns the island off: it leaves the screen and stays
 away until you bring it back. The way back is the OpenCode menu — on macOS
-the app menu, `OpenCode → Show island`, on Windows the same item in the
-in-app menu.
+the app menu, on Windows the same items in the in-app menu:
+
+- **Show island** brings it back.
+- **Hide island** turns it off from the menu, without opening it.
+
+Only one of them is live at a time; the other is greyed out, and that is what
+says whether the island is on. The menu itself cannot change its labels while
+it is open, so the live item is the one that carries the state.
 
 The island stays off when OpenCode restarts. The other switches in the bar do
 not: they are remembered for the session only.

@@ -571,6 +571,14 @@ assert.match(windowSource, /DRAWER_HEIGHT_SHARE = 0\.8/)
 const guiSource = readFileSync(new URL("../src/gui.tsx", import.meta.url), "utf8")
 assert.match(guiSource, /updated: _updated/)
 
+// The native menu is built once, so its labels cannot follow the island's
+// state: which item is lit is what says it. Both items carry the state in
+// `enabled`, which the menu reads again every time it opens.
+assert.match(guiSource, /id: "island-show"/)
+assert.match(guiSource, /id: "island-hide"/)
+assert.match(guiSource, /enabled: \(\) => !enabled\.value/)
+assert.match(guiSource, /enabled: \(\) => enabled\.value/)
+
 // The composer sends on Enter, and shows a failure in the island.
 const islandSource = readFileSync(
   new URL("../src/island/app/components/island.tsx", import.meta.url),
