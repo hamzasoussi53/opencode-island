@@ -168,6 +168,7 @@ comes back the same size the next time.
 |---|---|
 | ☀️ 🌙 🖥 | Appearance, in one button: click it and it cycles light, dark, system |
 | ⬛ | Open OpenCode: the island floats above everything and never takes focus, so this brings the app back to the front |
+| 👁 | Turn the island off: it leaves the screen, and the OpenCode menu brings it back |
 | ⏻ | Close everything: the island and OpenCode both go |
 | 👆 | Click-through: the island stops taking clicks, except its grip, so you can still open it |
 | 📌 ⏱ | Stay open or Auto-close: the drawer stays open when the app takes the focus back, or it closes like it used to. It stays open by default |
@@ -175,6 +176,16 @@ comes back the same size the next time.
 
 The two first buttons are also in the closed tab, at the foot of the spine
 above the grip that resizes it.
+
+### Turning the island off
+
+The eye-slash button turns the island off: it leaves the screen and stays
+away until you bring it back. The way back is the OpenCode menu — on macOS
+the app menu, `OpenCode → Show island`, on Windows the same item in the
+in-app menu.
+
+The island stays off when OpenCode restarts. The other switches in the bar do
+not: they are remembered for the session only.
 
 ### Approvals
 
@@ -252,7 +263,8 @@ is React.
   has the focus: Windows does not forward mouse moves to a lower-privilege
   app.
 - The island's spot along the edge, its appearance and its switches are
-  remembered for the session only; they reset when the app restarts.
+  remembered for the session only; they reset when the app restarts. The
+  island being turned off is the exception: that one is kept.
 - The island shows what the app's server knows. A session that never
   announces itself stays invisible.
 
