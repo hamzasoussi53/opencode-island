@@ -572,12 +572,12 @@ const guiSource = readFileSync(new URL("../src/gui.tsx", import.meta.url), "utf8
 assert.match(guiSource, /updated: _updated/)
 
 // The native menu is built once, so its labels cannot follow the island's
-// state: which item is lit is what says it. Both items carry the state in
-// `enabled`, which the menu reads again every time it opens.
-assert.match(guiSource, /id: "island-show"/)
-assert.match(guiSource, /id: "island-hide"/)
-assert.match(guiSource, /enabled: \(\) => !enabled\.value/)
-assert.match(guiSource, /enabled: \(\) => enabled\.value/)
+// state, and the one thing it re-reads — whether an item is enabled — never
+// reaches a plugin's items. So both items are always live, and each one says
+// what it does.
+assert.match(guiSource, /id: "island-show"[\s\S]*?enabled\.set\(true\)/)
+assert.match(guiSource, /id: "island-hide"[\s\S]*?enabled\.set\(false\)/)
+assert.doesNotMatch(guiSource, /enabled: \(\) =>/)
 
 // The composer sends on Enter, and shows a failure in the island.
 const islandSource = readFileSync(

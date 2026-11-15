@@ -145,25 +145,30 @@ export default Plugin.define({
     // The way back: the island is gone while it is off, so the app's own menu
     // is what turns it on again.
     //
-    // The native menu is built once, so its labels cannot follow the state.
-    // What does follow it is which item is lit: the menu reads `enabled` again
-    // every time it opens. So there are two items, and the one that does not
-    // apply is greyed out.
+    // The native menu is built once, so its labels cannot follow the state,
+    // and the one thing it does re-read — whether an item is enabled — never
+    // reaches the items a plugin adds. So both items are always live, and
+    // each one says what it does: one shows the island, the other hides it.
     ctx.add(MenubarItem, () => ({
       menu: "app" as const,
       id: "island-show",
       label: "Show island",
-      enabled: () => !enabled.value,
       run: () => {
-        enabled.set(true)
-        sync()
+        // The island is off: bring it back.
+        if (!enabled.value) {
+          enabled.set(true)
+          sync()
+          return
+        }
+        // It is already there: show what it has.
+        open = true
+        send()
       },
     }))
     ctx.add(MenubarItem, () => ({
       menu: "app" as const,
       id: "island-hide",
       label: "Hide island",
-      enabled: () => enabled.value,
       run: () => {
         enabled.set(false)
         sync()

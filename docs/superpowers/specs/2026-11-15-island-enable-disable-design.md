@@ -29,16 +29,18 @@ Two, and only two:
 1. **In the island's bottom bar**, next to the other switches: an eye-slash
    button, "Turn the island off". Pressing it turns the island off and the
    island is gone at once.
-2. **In the OpenCode app menu** (macOS: the app menu, so `OpenCode → Show
-   island`; Windows: the in-app menu): two items, `Show island` and `Hide
-   island`. This is the way back, because the island itself is gone while it
-   is off.
+2. **In the OpenCode app menu** (macOS: the app menu; Windows: the in-app
+   menu): two items, `Show island` and `Hide island`. This is the way back,
+   because the island itself is gone while it is off.
 
 The native macOS menu is built once, at startup, so its labels cannot follow
-the state — a label that reads `Hide island` stays that way whatever happens
-to the island. What the menu does re-read is `enabled`, every time it opens.
-So there are two items, and the one that does not apply is greyed out: that
-is what says whether the island is on.
+the state. The one thing it does re-read is `enabled`, every time it opens —
+but it does not reach the items a plugin adds, so an item that is greyed out
+there stays greyed out. A menu that can leave the only way back greyed out
+is worse than a menu that says nothing about the state, so both items are
+always live: `Show island` brings the island back (or opens its list if it is
+already there) and `Hide island` turns it off. Whether the island is on is
+said by the island itself: it is on the screen, or it is not.
 
 ## Why the app menu
 
@@ -85,8 +87,7 @@ plugin has, so turning it off takes that surface with it.
 
 Ruling: the island is turned off by destroying its window, the off state is
 kept in the app's plugin storage so it survives a restart, and the way back is
-two items in the OpenCode app menu, `Show island` and `Hide island`, of which
-only one is live at a time. — Costs: a user who turns the island off and
-forgets the app menu has to open the app menu to get it back. That is the
-price of a way back that needs no new surface, and the island's own button
-says where it is.
+two always-live items in the OpenCode app menu, `Show island` and `Hide
+island`, which never grey each other out. — Costs: the menu does not say
+whether the island is on, and the island's own button says where it is. A
+menu that can leave the only way back greyed out is worse.

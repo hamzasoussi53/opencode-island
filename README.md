@@ -183,12 +183,12 @@ The eye-slash button turns the island off: it leaves the screen and stays
 away until you bring it back. The way back is the OpenCode menu — on macOS
 the app menu, on Windows the same items in the in-app menu:
 
-- **Show island** brings it back.
-- **Hide island** turns it off from the menu, without opening it.
+- **Show island** brings it back, or opens its list if it is already there.
+- **Hide island** turns it off, without opening it.
 
-Only one of them is live at a time; the other is greyed out, and that is what
-says whether the island is on. The menu itself cannot change its labels while
-it is open, so the live item is the one that carries the state.
+Both are always there. The menu cannot grey out the one that does not apply,
+so whether the island is on is said by the island itself: it is either on
+the screen or it is not.
 
 The island stays off when OpenCode restarts. The other switches in the bar do
 not: they are remembered for the session only.
