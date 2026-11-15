@@ -44,6 +44,8 @@ export interface IslandWindowOptions {
   /** The page installed its listeners; send it the first state. */
   onReady: () => void
   onToggle: () => void
+  /** The island was turned off, so its window goes away. */
+  onHide: () => void
   /** The island lost focus, so it should contract. */
   onBlur: () => void
   onReply: (reply: Reply) => void
@@ -208,6 +210,12 @@ export function createIslandWindow(options: IslandWindowOptions) {
 
   const onToggle = (event: Electron.IpcMainEvent) => {
     if (ours(event.sender)) options.onToggle()
+  }
+
+  // The island turns itself off: its window goes away and the app's menu
+  // brings it back.
+  const onHide = (event: Electron.IpcMainEvent) => {
+    if (ours(event.sender)) options.onHide()
   }
 
   const onReply = (event: Electron.IpcMainEvent, reply: Reply) => {
@@ -402,6 +410,7 @@ export function createIslandWindow(options: IslandWindowOptions) {
   ipcMain.on(`${CHANNEL}:ready`, onReady)
   ipcMain.on(`${CHANNEL}:size`, onSize)
   ipcMain.on(`${CHANNEL}:toggle`, onToggle)
+  ipcMain.on(`${CHANNEL}:hide`, onHide)
   ipcMain.on(`${CHANNEL}:reply`, onReply)
   ipcMain.on(`${CHANNEL}:cancel`, onCancel)
   ipcMain.on(`${CHANNEL}:drag-start`, onDragStart)
@@ -460,6 +469,7 @@ export function createIslandWindow(options: IslandWindowOptions) {
       ipcMain.removeListener(`${CHANNEL}:ready`, onReady)
       ipcMain.removeListener(`${CHANNEL}:size`, onSize)
       ipcMain.removeListener(`${CHANNEL}:toggle`, onToggle)
+      ipcMain.removeListener(`${CHANNEL}:hide`, onHide)
       ipcMain.removeListener(`${CHANNEL}:reply`, onReply)
       ipcMain.removeListener(`${CHANNEL}:cancel`, onCancel)
       ipcMain.removeListener(`${CHANNEL}:drag-start`, onDragStart)
@@ -469,7 +479,7 @@ export function createIslandWindow(options: IslandWindowOptions) {
       ipcMain.removeListener(`${CHANNEL}:resize`, onResize)
       ipcMain.removeListener(`${CHANNEL}:resize-end`, onResizeEnd)
       ipcMain.removeListener(`${CHANNEL}:drawer-size`, onDrawerSize)
-    ipcMain.removeListener(`${CHANNEL}:auto-close`, onAutoClose)
+      ipcMain.removeListener(`${CHANNEL}:auto-close`, onAutoClose)
       ipcMain.removeListener(`${CHANNEL}:open-app`, onOpenApp)
       ipcMain.removeListener(`${CHANNEL}:quit`, onQuit)
       ipcMain.removeHandler(`${CHANNEL}:screen`)

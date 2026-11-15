@@ -12,6 +12,8 @@ declare global {
       ready: () => void
       size: (width: number, height: number) => void
       toggle: () => void
+      /** Turn the island off: the window goes away, and the app's menu brings it back. */
+      hide: () => void
       reply: (reply: { sessionID: string; requestID: string; decision: PermissionDecision }) => void
       prompt: (request: {
         sessionID: string

@@ -1,6 +1,8 @@
 import { OpenCode } from "@opencode/client"
 import { Plugin } from "@opencode/plugin/gui"
+import { MenubarItem } from "@opencode/plugin/gui/main"
 import { app } from "electron"
+import { Schema } from "effect"
 import { createModel } from "./model"
 import { islandShouldExist } from "./lifecycle"
 import { createIslandWindow } from "./window"
@@ -18,6 +20,9 @@ import type { AutoClose, IslandMessage, IslandState } from "./state"
  */
 export default Plugin.define({
   main(ctx) {
+    // Whether the island is on. The app's own storage keeps it, so the island
+    // stays off when OpenCode restarts.
+    const enabled = ctx.storage.store("enabled", { schema: Schema.Boolean, initial: true })
     let state: IslandState = { sessions: [], working: 0, waiting: 0 }
     let open = false
     // Whether the drawer closes when the app takes the focus back. The island
@@ -56,6 +61,12 @@ export default Plugin.define({
         onToggle: () => {
           open = !open
           send()
+        },
+        onHide: () => {
+          // The island turns itself off: its window goes away, and the app's
+          // menu brings it back.
+          enabled.set(false)
+          sync()
         },
         onBlur: () => {
           if (!open) return
@@ -127,9 +138,22 @@ export default Plugin.define({
     // The app's own windows, counted so the island can follow them.
     const windows = new Set(ctx.windows.list().map((window) => window.id))
     const sync = () => {
-      if (islandShouldExist(windows.size)) create()
+      if (islandShouldExist(windows.size, enabled.value)) create()
       else destroy()
     }
+
+    // The way back: the island is gone while it is off, so the app's own menu
+    // is what turns it on again.
+    ctx.add(MenubarItem, () => ({
+      menu: "app" as const,
+      id: "island",
+      label: enabled.value ? "Hide island" : "Show island",
+      run: () => {
+        enabled.set(!enabled.value)
+        sync()
+      },
+    }))
+
     ctx.windows.on("open", (window) => {
       windows.add(window.id)
       sync()

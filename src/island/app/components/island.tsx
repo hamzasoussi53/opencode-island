@@ -9,6 +9,7 @@ import {
   CaretDown,
   CursorClick,
   DotsSixVertical,
+  EyeSlash,
   ListDashes,
   Monitor,
   Moon,
@@ -602,6 +603,17 @@ export function Island() {
               className={cn(alert && "border-warning-foreground/30 bg-transparent hover:bg-warning-foreground/10")}
             >
               <OpenCodeMark className="h-4 w-[13px]" />
+            </Button>
+
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={() => window.island.hide()}
+              aria-label="Turn the island off"
+              title="Turn the island off. Turn it back on from the OpenCode menu."
+              className={cn(alert && "border-warning-foreground/30 bg-transparent hover:bg-warning-foreground/10")}
+            >
+              <EyeSlash weight="duotone" />
             </Button>
 
             <Button

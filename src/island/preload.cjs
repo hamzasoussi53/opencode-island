@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld("island", {
   ready: () => ipcRenderer.send("opencode-island:ready"),
   size: (width, height) => ipcRenderer.send("opencode-island:size", { width, height }),
   toggle: () => ipcRenderer.send("opencode-island:toggle"),
+  hide: () => ipcRenderer.send("opencode-island:hide"),
   reply: (reply) => ipcRenderer.send("opencode-island:reply", reply),
   prompt: (request) => ipcRenderer.invoke("opencode-island:prompt", request),
   queued: (sessionID) => ipcRenderer.invoke("opencode-island:queued", sessionID),
