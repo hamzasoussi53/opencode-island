@@ -10,7 +10,7 @@ import { installPlanRule } from "./rules.ts"
  * off the event stream, so the tool keeps nothing.
  *
  * It also puts the rule that asks the agent to use it into the global
- * instructions, once.
+ * instructions, and keeps it current on every load, so an update lands too.
  */
 export default Plugin.define({
   id: "opencode-island",

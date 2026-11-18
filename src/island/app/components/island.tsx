@@ -809,6 +809,7 @@ function Row({
   const waiting = Boolean(session.permission)
   const muted = alert ? "text-warning-foreground/70" : "text-muted-foreground"
   const orb = orbState(session)
+  const inHand = session.plan?.find((step) => step.state === "working")
 
   return (
     <div
@@ -868,6 +869,12 @@ function Row({
             <span className={cn("text-[10.5px] tabular-nums", muted)}>
               {session.plan.filter((step) => step.state === "done").length}/{session.plan.length}
             </span>
+          </div>
+        ) : null}
+        {inHand?.title ? (
+          // The step in hand, named in full, so the plan reads without a hover.
+          <div className={cn("truncate text-[11px]", muted)}>
+            <span className="tabular-nums">{inHand.n}</span> {inHand.title}
           </div>
         ) : null}
         {session.stream ? (

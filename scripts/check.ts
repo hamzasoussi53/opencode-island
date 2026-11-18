@@ -162,6 +162,27 @@ assert.ok(after.includes(planRule()))
 assert.equal(installPlanRule(file), false)
 assert.equal(readFileSync(file, "utf8"), after)
 
+// A rule worded differently is replaced in place, so an older install gets the
+// new wording, and nothing around the block moves.
+writeFileSync(
+  file,
+  "# Global instructions\n\n<!-- opencode-island:plan -->\nold wording\n<!-- /opencode-island:plan -->\n\nAfter.\n",
+)
+assert.equal(installPlanRule(file), true)
+const upgraded = readFileSync(file, "utf8")
+assert.ok(upgraded.includes(planRule()))
+assert.ok(!upgraded.includes("old wording"))
+assert.ok(upgraded.startsWith("# Global instructions\n\n"))
+assert.ok(upgraded.endsWith("After.\n"))
+assert.equal(installPlanRule(file), false)
+
+// A block whose closing marker is gone still gets a working rule.
+writeFileSync(file, "# Notes\n\n<!-- opencode-island:plan -->\n## The island's plan\nbroken\n")
+assert.equal(installPlanRule(file), true)
+const repaired = readFileSync(file, "utf8")
+assert.ok(repaired.startsWith("# Notes\n\n"))
+assert.equal(repaired.match(/<!-- \/opencode-island:plan -->/g)?.length, 1)
+
 // The rule goes in even when the directory is not there yet, which is a
 // fresh machine.
 const fresh = join(mkdtempSync(join(tmpdir(), "island-fresh-")), "opencode", "AGENTS.md")
